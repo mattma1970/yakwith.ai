@@ -1,2 +1,2 @@
 # yakwith.ai
-Locally server voicebots
+Locally served voicebots
