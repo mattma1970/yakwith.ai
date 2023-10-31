@@ -1,0 +1,11 @@
+torch
+pydantic
+fastapi
+uvicorn
+pyaudio
+websockets
+streamlit
+streamlit_webrtc
+numpy
+av
+pydub
