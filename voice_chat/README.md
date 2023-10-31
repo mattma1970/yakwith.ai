@@ -4,5 +4,8 @@ Uses webRTC custom component for streamlit [https://github.com/whitphx/streamlit
 
 Designed to work with HF models served by TGI. 
 
+** Installation **
+Requires custom verison of griptape.ai from https://github.com/mattma1970/griptape/tree/main. This fork contains HuggingFaceInferenceClientPromptDriver which can be used with HF models served from arbitrary endpoints. 
+
 
 

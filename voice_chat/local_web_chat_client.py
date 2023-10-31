@@ -154,21 +154,6 @@ with status_area:
 	st_text_output = st.empty()
 #</body>
 
-def token_counter(model_path: str):
-	'''Instantiate the tokenizer so we can keep track of the conversion history length in tokens.
-	args:
-		model_path: str: path to the sentancepiece model use for tokenizing
-	returns:
-		function: partial function that tokenizes the input text and returns the length in tokens.
-	'''
-	tokenizer = tok(model_path)
-	def token_count(prompt: Union[List,str]):
-		if isinstance(prompt,str):
-			prompt=[prompt]
-		str_prompt = ''.join([json.dumps(a) for a in prompt])
-		return len(tokenizer.encode(str_prompt, False,False ))
-	return token_count
-
 def post_process_text(input: str):
 	"""Posprocessing for emojis"""
 	pattern = r'\*(.*?)\*'

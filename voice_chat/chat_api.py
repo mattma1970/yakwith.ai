@@ -1,94 +1,77 @@
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict
-
-from chat_data_classes import InferenceSessionPrompt, InferenceDialog
-
-from llama import Llama
-
+from typing import List, Optional, Union, Dict, Any
+from dotenv import load_dotenv
+from uuid import uuid4
+from attr import define, field
 import argparse
 import os
 import json
 import logging
 
+from yak_agent import YakAgent
+from chat_data_classes import ApiUserMessage, AppParameters
 
 from griptape.structures import Agent
-from griptape.utils import Chat #   <-- Added Chat
-from griptape.drivers import LocalLlamaPromptDriver
-from griptape.utils.prompt_stack import PromptStack
-from griptape.tools import WebScraper
-
+from griptape.utils import Chat, PromptStack
+from griptape.drivers import HuggingFaceInferenceClientPromptDriver
+from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
-
-app=FastAPI()
-logger = logging.getLogger(__name__)
 
 
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
 
-@app.post('/chat')
-def perform_inference(dialogs: InferenceDialog):
+app=FastAPI()
+agent_registry = {}
+logger = logging.getLogger(__name__)
+
+@app.get('/create_agent_session/')
+def create_agent_session(user_uid: Optional[str]=None):
     '''
-        Post processes by default - DEPRECATED
+    Create an instance of an Agent and save it to the agent_registry.
+    Arguments:
+        user_id: a unique id for the user supplied by authentication tool.
+    Returns:
+        session_id: str(uuid4): the session_id under which the agent is registered.
     '''
+    agent = None
+    session_id = None
 
-    dialogs=dialogs['dialogs']
+    if user_uid is not None:
+        raise NotImplementedError('User based customisation not yet implemented.')
+    else:
+        agent = YakAgent()    
+        session_id = str(uuid4())
 
-    response = llm.chat_completion(
-        dialogs,  # List[List[dict]]
-        max_gen_len=args.max_gen_len,
-        temperature=args.temperature,
-        top_p=args.top_p,
-    )
-
-    if args.debug:
-        for dialog, result in zip(dialogs, response):
-            for msg in dialog:
-                print(f"{msg['role'].capitalize()}: {msg['content']}\n")
-            print(
-                f"> {result['generation']['role'].capitalize()}: {result['generation']['content']}"
-            )
-            print("\n==================================\n")
-
-    response=response['data'][0]['generation']['content']
-
-    return {"data":response}
-
-
+    agent_registry[session_id]=agent
+    return {'session_id':session_id}
+        
 
 @app.post('/chat_with_agent')
-def chat_using_agent(dialogs: Union[InferenceSessionPrompt,str]) -> Dict[str,str]:
+def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
     '''
         Chat text_generation using griptape agent. Conversation memory is managed by Griptape so only the new question is passed in. 
-        
-        @args:
-            dialogs: json.dumps(InferenceSessionPrompt)
-        @returns: {'data': results}: chat completion results as dictionary. Mimics response from direct call to the models API.
-        @raises:
+
+        Arguments:
+            message: ApiUserMessage : message with session_id and opt(user_id)
+        Returns:
+            {'data': results}: chat completion results as dictionary. Mimics response from direct call to the models API.
+        Raises:
             RuntimeException if dialogs doesn't deserialize to a valid InferernceSessionPrompt
     '''
 
-    '''Check that the dialogs are valid Inf'''
-    if (dialogs:=InferenceSessionPrompt.parse(dialogs)) is None:
-        raise RuntimeError('dialogs are not in valid form.')
-      
-    '''Retrieve the agent for the requestor. The agent also contains the conversation memory.'''
-    session_id:str = dialogs.session_id
+    # Retrieve the Agent (and agent memory) if session already underway
+    session_id:str = message.session_id
     if session_id not in agent_registry:
-        agent_registry[session_id] = build_agent(llm,args)
-    agent: Agent = agent_registry[session_id] 
-
-    if len(dialogs.prompt)>1 and dialogs.prompt[0].role==PromptStack.SYSTEM_ROLE:
-        system_prompt = dialogs.prompt[0]
-        user_input=dialogs.prompt[1].content
-        raise Warning('Replacing System Prompt is not yet implemented.')
+        raise RuntimeError('No agent found. An agent must be created prior to starting chat.')
+    
+    agent: YakAgent = agent_registry[session_id]
+    if getattr(agent, 'stream'):        
+        response = agent.run(message.user_input)
+        return Response(response, mimetype='text/plain') # Return the generator
     else:
-        system_prompt = None
-        user_input=dialogs.prompt[0].content
-   
-    #print(user_input)
-    response = agent.run(user_input).output.to_text()
-    return {'data':response}
+        response = agent.run(message.user_input).output.to_text()
+        return {'data':response}
 
 @app.get('/llm_params')
 def get_llm_params():
@@ -100,37 +83,6 @@ def get_llm_params():
             'max_batch_size':args.max_batch_size,
             'supported_tasks': _ALL_TASKS
             }
-
-''' ===== AI-staff manufacturing facility ==== '''
-
-def build_llm(args):
-    llm = Llama.build(
-        ckpt_dir= os.path.join(args.root_path,args.model_path),
-        tokenizer_path=args.tokenizer_path,
-        max_seq_len=args.max_seq_len,
-        max_batch_size=args.max_batch_size,
-    )
-    return llm
-
-def build_agent(model, args):   
-    
-    base_ruleset = Ruleset(
-        name='BasicPersonality',
-        rules=[
-            Rule('You identify as a person from New Zealand.'),
-            Rule('You have strong New Zealand accent')]
-    )
-
-    params =  {
-            "max_new_tokens": args.max_gen_len, #new tokens per generation
-            "max_tokens": args.max_seq_len, # maximum context window+new_tokens.
-        }
-    agent = Agent(logger_level=logging.INFO, 
-                    rulesets=[base_ruleset],
-                    prompt_driver=LocalLlamaPromptDriver(inference_resource=model, task='chat', tokenizer_path=args.tokenizer_path, params = params),
-                    tools=[WebScraper()]
-                    )
-    return agent
 
 if __name__ == "__main__":
 
@@ -146,9 +98,5 @@ if __name__ == "__main__":
     parser.add_argument('--debug',action='store_true', default =False, help='Be far more chatty about the internals.')
     args = parser.parse_args()
 
-    llm=build_llm(args)
-    agent = build_agent(llm,args)
-    agent_registry = {}
-
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8080)
+    uvicorn.run(app, host='0.0.0.0', port=8884)

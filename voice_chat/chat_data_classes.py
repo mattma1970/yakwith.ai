@@ -1,27 +1,14 @@
+from typing import Optional, Dict
 from pydantic import BaseModel
-from dataclasses import dataclass
-from typing import List
-import json
-from attrs import define, field
 
-
-class InferencePrompt(BaseModel):
-    role: str
-    content: str
-
-class InferenceDialog(BaseModel):
-    """ A list of conversations."""
-    dialogs: List[List[InferencePrompt]]
-
-class InferenceSessionPrompt(BaseModel):
-    """A dialog or turn labelled with the clients session_id"""
-    prompt: List[InferencePrompt]
+class ApiUserMessage(BaseModel):
+    """Message sent from App"""
+    user_input: str
     session_id: str
-    
-    @classmethod
-    def parse(cls, input: str):
-        try:
-            ret = InferenceSessionPrompt(**json.loads(input))
-        except:
-            return None
-        return ret
+    user_id:Optional[str]
+
+class AppParameters(BaseModel):
+    """Parameters app"""
+    name: str
+    action: str
+    params: Dict[str,str]
