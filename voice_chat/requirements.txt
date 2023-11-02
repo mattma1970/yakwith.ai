@@ -12,3 +12,4 @@ pydub
 attrs
 tqdm
 aiohttp
+sentencepiece

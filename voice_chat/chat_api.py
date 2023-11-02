@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any
 from dotenv import load_dotenv
@@ -17,6 +18,9 @@ from griptape.utils import Chat, PromptStack
 from griptape.drivers import HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
+from griptape.utils import Stream
+
+from copy import deepcopy
 
 
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
@@ -24,6 +28,8 @@ _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
 app=FastAPI()
 agent_registry = {}
 logger = logging.getLogger(__name__)
+
+_agent = None
 
 @app.get('/create_agent_session/')
 def create_agent_session(user_uid: Optional[str]=None):
@@ -43,7 +49,10 @@ def create_agent_session(user_uid: Optional[str]=None):
         agent = YakAgent()    
         session_id = str(uuid4())
 
-    agent_registry[session_id]=agent
+    agent_registry['1']=agent
+    agent_registry['2']=YakAgent()
+
+    #_agent = deepcopy(agent)
     return {'session_id':session_id}
         
 
@@ -65,12 +74,13 @@ def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
     if session_id not in agent_registry:
         raise RuntimeError('No agent found. An agent must be created prior to starting chat.')
     
-    agent: YakAgent = agent_registry[session_id]
-    if getattr(agent, 'stream'):        
-        response = agent.run(message.user_input)
-        return Response(response, mimetype='text/plain') # Return the generator
+    yak: YakAgent = agent_registry[session_id]
+
+    if getattr(yak, 'stream'):        
+        response = Stream(yak.agent).run(message.user_input)
+        return StreamingResponse(response, media_type='text/plain')
     else:
-        response = agent.run(message.user_input).output.to_text()
+        response = yak.run(message.user_input).output.to_text()
         return {'data':response}
 
 @app.get('/llm_params')
