@@ -39,7 +39,7 @@ from registry import FuncRegistry
 from audio_connections import WebRTCAudioSteam, PyAudioStream, AudioConnection
 from utils import st_html, turn_sum, endpoint
 from history_manager import history as History
-from chat_data_classes import InferenceDialog,InferenceSessionPrompt,InferencePrompt
+from voice_chat.data.chat_data_classes import InferenceDialog,InferenceSessionPrompt,InferencePrompt
 import emoji
 
 

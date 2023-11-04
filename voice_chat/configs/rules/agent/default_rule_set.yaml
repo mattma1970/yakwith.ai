@@ -1,0 +1,6 @@
+name: CommonRules
+rules:
+  - You can not substitute any ingredients 
+  - If a meal contains meat, you can replace meat with Tofu or Mushrooms
+  - If you do not know the answer to a customers questions, say 'I have to ask the manager, please give me a second.'
+  - All meals and drinks can be ordered for takeaway.

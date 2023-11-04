@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Iterator
 from dotenv import load_dotenv
 from uuid import uuid4
 from attr import define, field
@@ -11,7 +11,7 @@ import json
 import logging
 
 from yak_agent import YakAgent
-from chat_data_classes import ApiUserMessage, AppParameters
+from voice_chat.data.chat_data_classes import ApiUserMessage, AppParameters
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -19,8 +19,7 @@ from griptape.drivers import HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
 from griptape.utils import Stream
-
-from copy import deepcopy
+from griptape.artifacts import TextArtifact
 
 
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
@@ -29,13 +28,18 @@ app=FastAPI()
 agent_registry = {}
 logger = logging.getLogger(__name__)
 
-_agent = None
+def my_gen(response: Iterator[TextArtifact])->str:
+    for chunk in response:
+        yield chunk.value
+
 
 @app.get('/create_agent_session/')
-def create_agent_session(user_uid: Optional[str]=None):
+def create_agent_session(cafe_id: str, agent_rules_id:str, user_id:Optional[str]=None)->Dict:
     '''
     Create an instance of an Agent and save it to the agent_registry.
     Arguments:
+        cafe_id: unique id for the cafe. Used to index menu, cafe policies
+        agent_rules_id: unique id for the rules
         user_id: a unique id for the user supplied by authentication tool.
     Returns:
         session_id: str(uuid4): the session_id under which the agent is registered.
@@ -43,18 +47,14 @@ def create_agent_session(user_uid: Optional[str]=None):
     agent = None
     session_id = None
 
-    if user_uid is not None:
+    if user_id is not None:
         raise NotImplementedError('User based customisation not yet implemented.')
     else:
-        agent = YakAgent()    
+        agent = YakAgent(cafe_id,agent_rules_id)    
         session_id = str(uuid4())
 
-    agent_registry['1']=agent
-    agent_registry['2']=YakAgent()
-
-    #_agent = deepcopy(agent)
+    agent_registry[session_id]=agent
     return {'session_id':session_id}
-        
 
 @app.post('/chat_with_agent')
 def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
@@ -76,9 +76,9 @@ def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
     
     yak: YakAgent = agent_registry[session_id]
 
-    if getattr(yak, 'stream'):        
+    if getattr(yak, 'stream'):
         response = Stream(yak.agent).run(message.user_input)
-        return StreamingResponse(response, media_type='text/plain')
+        return StreamingResponse(my_gen(response), media_type='text/stream-event')
     else:
         response = yak.run(message.user_input).output.to_text()
         return {'data':response}
