@@ -9,14 +9,13 @@ import websockets
 import asyncio
 import base64
 import json
-from configure import auth_key
+import os
+from dotenv import load_dotenv
 import streamlit as st
 import requests
 import re
 import argparse
 from typing import List, Union
-
-from llama.tokenizer import Tokenizer as tok
 
 if 'run' not in st.session_state:
 	st.session_state['run'] = False
@@ -56,31 +55,15 @@ stop.button('Stop', on_click=stop_listening)
 URL = f'wss://api.assemblyai.com/v2/realtime/ws?sample_rate={RATE}'
 
 
-
-def token_counter(model_path: str):
-	'''Instantiate the tokenizer so we can keep track of the conversion history length in tokens.
-	args:
-		model_path: str: path to the sentancepiece model use for tokenizing
-	returns:
-		function: partial function that tokenizes the input text and returns the length in tokens.
-	'''
-	tokenizer = tok(model_path)
-	def token_count(prompt: Union[List,str]):
-		if isinstance(prompt,str):
-			prompt=[prompt]
-		str_prompt = ''.join([json.dumps(a) for a in prompt])
-		return len(tokenizer.encode(str_prompt, False,False ))
-	return token_count
-
-# use async functions to send input from mic and one for listening for response. 
 async def send_receive(args):
-
+	"""
+		Async send and recieve with speech to text 
+	"""
 	print(f'Connecting websocket to url ${URL}')
-
 
 	async with websockets.connect(
 		URL,
-		extra_headers=(("Authorization", auth_key),),
+		extra_headers=(("Authorization", os.environ['assembly_ai_api']),),
 		ping_interval=5,
 		ping_timeout=20
 	) as _ws:

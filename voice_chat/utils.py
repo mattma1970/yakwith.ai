@@ -8,7 +8,11 @@ from typing import List
 import base64
 import numpy as np
 import av
+from enum import Enum
+from datetime import datetime
 
+def time_only(time:datetime) -> int:
+	return time.hour*60 + time.minute
 
 def turn_sum(chat_history_lengths: List[List[int]])->int:
 	'''

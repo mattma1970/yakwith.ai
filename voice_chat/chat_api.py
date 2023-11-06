@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
+
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator
 from dotenv import load_dotenv
@@ -9,18 +10,23 @@ import argparse
 import os
 import json
 import logging
+from datetime import time, datetime
 
-from yak_agent import YakAgent
-from voice_chat.data.chat_data_classes import ApiUserMessage, AppParameters
+from voice_chat.agents.yak_agent import YakAgent
+from voice_chat.data_classes.chat_data_classes import ApiUserMessage, AppParameters
 
-from griptape.structures import Agent
+from griptape.structures import Agent, Run
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
 from griptape.utils import Stream
 from griptape.artifacts import TextArtifact
+from griptape.memory.structure import Run
 
+from omegaconf import OmegaConf, DictConfig
+
+from dataclasses import dataclass
 
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
 
@@ -32,9 +38,10 @@ def my_gen(response: Iterator[TextArtifact])->str:
     for chunk in response:
         yield chunk.value
 
-
 @app.get('/create_agent_session/')
-def create_agent_session(cafe_id: str, agent_rules_id:str, user_id:Optional[str]=None)->Dict:
+def create_agent_session(cafe_id: str,    
+                        agent_rules_id:str,
+                        user_id:Optional[str]=None)->Dict:
     '''
     Create an instance of an Agent and save it to the agent_registry.
     Arguments:
@@ -44,16 +51,19 @@ def create_agent_session(cafe_id: str, agent_rules_id:str, user_id:Optional[str]
     Returns:
         session_id: str(uuid4): the session_id under which the agent is registered.
     '''
-    agent = None
+    yak_agent = None
     session_id = None
 
     if user_id is not None:
         raise NotImplementedError('User based customisation not yet implemented.')
     else:
-        agent = YakAgent(cafe_id,agent_rules_id)    
         session_id = str(uuid4())
+        yak_agent = YakAgent(cafe_id,agent_rules_id)
+        # retrive menu
+        
+        yak_agent.agent.memory.add_run(Run(input='menu', output='ok'))
 
-    agent_registry[session_id]=agent
+    agent_registry[session_id]=yak_agent
     return {'session_id':session_id}
 
 @app.post('/chat_with_agent')
@@ -83,21 +93,14 @@ def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
         response = yak.run(message.user_input).output.to_text()
         return {'data':response}
 
-@app.get('/llm_params')
-def get_llm_params():
-    '''Get some model params that are needed by the app for chat history management.'''
-    return {
-            'max_seq_len':args.max_seq_len,
-            'max_gen_len': args.max_gen_len,
-            'top_p':args.top_p,
-            'max_batch_size':args.max_batch_size,
-            'supported_tasks': _ALL_TASKS
-            }
-
 if __name__ == "__main__":
 
+    LLM_config_file: Optional[str] = field(default='voice_chat/configs/model_driver/default_model_driver.yaml')
+    agent_rules_id: Optional[str] = field(default='voice_chat/configs/rules/agent/default_rule_set.yaml')
+
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root_path',type=str, default='/home/mtman/Documents/Repos/llama/')
+    parser.add_argument('--menu_path',type=str, default='/home/mtman/Documents/Repos/llama/')
     parser.add_argument('--model_path', type=str, default='llama-2-7b', help='Relative path to root_path')
     parser.add_argument('--tokenizer_path', type=str, default='./tokenizer.model')
     parser.add_argument('--temperature', type=float, default=0.6)
