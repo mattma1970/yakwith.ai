@@ -12,7 +12,7 @@ import json
 import logging
 from datetime import time, datetime
 
-from voice_chat.agents.yak_agent import YakAgent
+from voice_chat.yak_agent.yak_agent import YakAgent
 from voice_chat.data_classes.chat_data_classes import ApiUserMessage, AppParameters
 
 from griptape.structures import Agent, Run

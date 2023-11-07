@@ -35,7 +35,7 @@ class AppParameters(BaseModel):
 @define
 class ModelDriverConfiguration:
     """
-    LLM Driver Configuration
+    LLM Driver Configuration targeting HF InferenceClient
     'stream' is used both by InferenceClient (params) and by griptape as a attribute.
     """
 

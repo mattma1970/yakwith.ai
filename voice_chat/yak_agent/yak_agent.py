@@ -17,7 +17,7 @@ import json
 import logging
 from omegaconf import OmegaConf
 
-from voice_chat.data_classes.chat_data_classes import ModelDriverConfiguration, RuleList
+from data_classes.chat_data_classes import ModelDriverConfiguration, RuleList
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +31,24 @@ RULE_RESTAURANT_FOLDER = 'restaurant'
 @define(kw_only=True)
 class YakAgent:
     """
-        Helper class for creating Chat Agent.
+        Helper class for creating Yak Chat Agent powered by custom griptape prompt driver HuggingFaceInferenceClientPromptDriver
+        See dev branch https://github.com/mattma1970/griptape/tree/yak_dev
 
         Attributes:
-            cafe_id: unique id of cafe. Used to index cafe_data 
-            model_driver_name: HF namespace/repo_id or URL of model_endpoint.
-            tokenizer: Hf namespace/repo_id or path to locally saved AutoTokenizer
-            stream: boolean indicating if the chat response should be streamed back. 
-            stream_chunk_size: the number of chunks to accumulate when streaming before yielding back to client.
-            token: HF token. Not needed if serving model locally.
-            params: Dictionary of model/tokenizer specific parameters.
+            cafe_id: (str, default='default') : A uid for the establishment. Primarily used to index configurations.
+            model_driver_config: ModelDriverConfiguration, optional: Configuration object for prompt driver.
+            model_driver_config_name: str, optional : filename of the yaml configuration file for prompt driver. If model_driver_config is specified, this is ignored.
+  
+            rule_names: Dict, optional: rules are distributed for Yak and this Dict contains the leaf folder and yaml filenames of the collection of rules.
+            rules : RuleList : Used to collect the distributed rules. If rules are passed in the rule_names is ignored.
+            user_id: str, optional
+
+            stream: bool, optional: streaming flag for both the prompt driver and the Agent.
+            :: Attributes not initialized ::
+            streaming_event_listeners: List[EventListener], optional: List of event listeners for the griptape.agent. Mostly useful for debugging.
+            output_fn: Callable, optional: output of streaming responses.
+            agent: Agent
+
     """
     def check_keys(self, attribute, value):
         if value is not None:
@@ -67,7 +75,8 @@ class YakAgent:
                     self.model_driver_config_name+='.yaml'
                 config_filename=os.path.join(MODEL_DRIVER_ROOT_PATH,self.model_driver_config_name)
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(OmegaConf.load(config_filename))
-            if self.agent_rules is None:
+
+            if self.agent_rules is None: #TODO create a rulehandler to enable different backend storage of rules. 
                 for rule_key, rule_file_name in self.rule_names.items():
                     _conf = os.path.join(RULES_ROOT_PATH,self.cafe_id,rule_key,rule_file_name)
                     if '.yaml' not in _conf:
