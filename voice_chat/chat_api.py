@@ -40,7 +40,7 @@ def my_gen(response: Iterator[TextArtifact])->str:
 
 @app.get('/create_agent_session/')
 def create_agent_session(cafe_id: str,    
-                        agent_rules_id:str,
+                        agent_rules:str,
                         user_id:Optional[str]=None)->Dict:
     '''
     Create an instance of an Agent and save it to the agent_registry.

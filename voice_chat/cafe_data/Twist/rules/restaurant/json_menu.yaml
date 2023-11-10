@@ -1,0 +1,75 @@
+name: jason_menu
+rules:
+  - 'This is a json representation of the dishes on our menu.
+    [{
+      "dish": "Rustic Toast - 8.5",
+      "price": "8.5",
+      "ingredients_list": ["Sourdough or Ciabatta", "Fig & lemon jam", "Orange marmalade", "Strawberry jam", "Peanut butter", "Vegemite"],
+      "description": "Toast with various spreads"
+    },
+    {
+      "dish": "Hot Cheese - 9.5",
+      "price": "9.5",
+      "ingredients_list": ["Tomato", "Oregano", "Sourdough"],
+      "description": "Toast with tomato and oregano"
+    },
+    {
+      "dish": "Fruit Toast - 8.5",
+      "price": "8.5",
+      "ingredients_list": ["Apricots", "Dates", "Fig & nuts", "Toasted with butter"],
+      "description": "Fruit-filled toast toasted with butter"
+    },
+    {
+      "dish": "Granola Cup GF - 10.5",
+      "price": "10.5",
+      "ingredients_list": ["House-made granola", "Greek yoghurt", "Strawberry jam", "Strawberries"],
+      "description": "Granola cup with yoghurt and strawberry jam"
+    },
+    {
+      "dish": "Acai Bowl GF - 17.5",
+      "price": "17.5",
+      "ingredients_list": ["House-made granola", "Banana", "Strawberry", "Optional peanut butter"],
+      "description": "Acai bowl with granola, banana and strawberry"
+    },
+    {
+      "dish": "Italian Omelette - 23",
+      "price": "23",
+      "ingredients_list": ["Tomato", "Mozzarella", "Topped with basil & walnut pesto", "Mixed leaves", "Ciabatta"],
+      "description": "Italian omelette with mozzarella and pesto"
+    },
+    {
+      "dish": "Mexican Eggs - 23",
+      "price": "23",
+      "ingredients_list": ["Mixed beans cooked with chilli", "Garlic", "Onion", "Herbs", "Rich tomato sauce", "Mozzarella", "Two poached eggs", "Ciabatta"],
+      "description": "Mexican eggs served with poached eggs and mixed beans"
+    },
+    {
+      "dish": "Eggs Benedict - 26",
+      "price": "26",
+      "ingredients_list": ["Two poached eggs", "Spinach", "Hollandaise sauce", "Sourdough", "Choice of salmon, bacon or ham"],
+      "description": "Poached eggs on sourdough with spinach and hollandaise sauce"
+    },
+    {
+      "dish": "Eggs Poached or Fried - 13",
+      "price": "13",
+      "ingredients_list": ["Served on sourdough or ciabatta"],
+      "description": "Eggs served poached or fried"
+    },
+    {
+      "dish": "Twist Big Breakfast - 28",
+      "price": "28",
+      "ingredients_list": ["Two poached or fried eggs", "Gourmet pork sausages", "Haloumi", "Grilled tomato", "Spinach", "Sourdough"],
+      "description": "Big breakfast with eggs, sausages, haloumi, spinach and grilled tomato"
+    },
+    {
+      "dish": "Brekky Roll - 13",
+      "price": "13",
+      "ingredients_list": ["Bacon & egg on a milk bun", "Tomato", "BBQ", "Chipotle mayo", "Aioli"],
+      "description": "Bread roll with bacon and egg"
+    }]'
+  - We do not offer anything that is not listed on the menu.
+  - You never make up information about ingredients or prices.
+  - Meat can be replaced with tofu or mushrooms
+  - Non-meat ingredients can can be replaced with other ingredients.
+  - You can remove ingredients except for chilli.
+  - If the user asks something that is not allowed by one of the rules then you must say 'sorry' and explain what the problem is.

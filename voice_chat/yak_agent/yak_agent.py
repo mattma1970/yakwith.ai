@@ -17,7 +17,7 @@ import json
 import logging
 from omegaconf import OmegaConf
 
-from data_classes.chat_data_classes import ModelDriverConfiguration, RuleList
+from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ MODEL_DRIVER_ROOT_PATH = 'voice_chat/configs/model_driver'
 RULES_ROOT_PATH = 'voice_chat/cafe_data'
 RULES_AGENT_FOLDER = 'agent'
 RULE_RESTAURANT_FOLDER = 'restaurant'
+RULES_PARENT_FOLDER = 'rules'
 
 @define(kw_only=True)
 class YakAgent:
@@ -35,15 +36,17 @@ class YakAgent:
         See dev branch https://github.com/mattma1970/griptape/tree/yak_dev
 
         Attributes:
-            cafe_id: (str, default='default') : A uid for the establishment. Primarily used to index configurations.
-            model_driver_config: ModelDriverConfiguration, optional: Configuration object for prompt driver.
-            model_driver_config_name: str, optional : filename of the yaml configuration file for prompt driver. If model_driver_config is specified, this is ignored.
+            cafe_id: A uid for the establishment. Primarily used to index configurations.
+            model_driver_config: ModelDriverConfiguration object for prompt driver.
+            model_driver_config_name: filename of the yaml configuration file for prompt driver. If model_driver_config is specified, this is ignored.
   
-            rule_names: Dict, optional: rules are distributed for Yak and this Dict contains the leaf folder and yaml filenames of the collection of rules.
-            rules : RuleList : Used to collect the distributed rules. If rules are passed in the rule_names is ignored.
-            user_id: str, optional
+            rule_names: Rules are distributed for Yak and this Dict contains the leaf folder and yaml filenames of the collection of rules.
+            rules : A RuleList used to collect the distributed rules. If rules are passed in the rule_names is ignored.
+            
+            user_id: a uid for the user if provided. Reserved for personalisation feature in the future.
+            task: the function name of the InferenceClient task that will be served.
+            stream: streaming flag for both the prompt driver and the Agent.
 
-            stream: bool, optional: streaming flag for both the prompt driver and the Agent.
             :: Attributes not initialized ::
             streaming_event_listeners: List[EventListener], optional: List of event listeners for the griptape.agent. Mostly useful for debugging.
             output_fn: Callable, optional: output of streaming responses.
@@ -60,9 +63,10 @@ class YakAgent:
     model_driver_config_name: Optional[str] = field(default='default_model_driver')
     model_driver_config: Optional[ModelDriverConfiguration] = field(default=None)
     rule_names: Optional[Dict] = field(default=Factory(dict), validator=[check_keys])
-    rules : Optional[RuleList] = field(default=None)
+    rules : Optional[list[Rule]] = field(default=Factory(list))
     user_id: Optional[str] = field(default=None)
   
+    task: Optional[str] = field(default='text_generation', kw_only=True)
     stream: Optional[bool] = field(default=False)
     streaming_event_listeners: Optional[List[EventListener]] = field(init=False)
     output_fn: Optional[Callable] = field(init=False)
@@ -76,12 +80,16 @@ class YakAgent:
                 config_filename=os.path.join(MODEL_DRIVER_ROOT_PATH,self.model_driver_config_name)
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(OmegaConf.load(config_filename))
 
-            if self.agent_rules is None: #TODO create a rulehandler to enable different backend storage of rules. 
+            if len(self.rules)==0: #TODO create a rulehandler to enable different backend storage of rules. 
                 for rule_key, rule_file_name in self.rule_names.items():
-                    _conf = os.path.join(RULES_ROOT_PATH,self.cafe_id,rule_key,rule_file_name)
+                    _conf = os.path.join(RULES_ROOT_PATH,self.cafe_id,RULES_PARENT_FOLDER,rule_key,rule_file_name)
                     if '.yaml' not in _conf:
                         _conf+='.yaml'
-                    self.rules.append(RuleList.from_omega_conf(OmegaConf.load(self._conf)))
+                    _rule_list = RuleList.from_omega_conf(OmegaConf.load(_conf))
+                    if len(self.rules)==0:
+                        self.rules = _rule_list.rules
+                    else:
+                        self.rules.extend(_rule_list.rules)
         except Exception as e:
             raise RuntimeError(f'Error loading agent related config file: {e}')
         
@@ -95,7 +103,7 @@ class YakAgent:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
 
-        self.agent = Agent(prompt_driver = HuggingFaceInferenceClientPromptDriver(
+        """ self.agent = Agent(prompt_driver = HuggingFaceInferenceClientPromptDriver(
                                                 token=self.model_driver_config.token,
                                                 model = self.model_driver_config.model,
                                                 pretrained_tokenizer = self.model_driver_config.pretrained_tokenizer,
@@ -104,18 +112,22 @@ class YakAgent:
                                                 stream=self.model_driver_config.stream,
                                                 stream_chunk_size=self.model_driver_config.stream_chunk_size,
                                                 ),
-                        event_listeners=self.streaming_event_listeners,
+                        #event_listeners=self.streaming_event_listeners,
                         logger_level=logging.ERROR,
                         rules= self.rules,
+                        stream=self.stream,
                         #tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
-        )
-        #self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=True),stream=True,event_listeners=self.callbacks)
+        )"""
+        self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=True),
+                            logger_level=logging.ERROR,
+                            rules= self.rules,
+                            stream=self.stream,)
+        pass
 
     def run(self,*args,**kwargs):
         return self.agent.run(*args,**kwargs)
     
 if __name__=='__main__':
-    yak = YakAgent(cafe_id='Twist', rule_names={'agent':'average_agent', 'restaurant':'house_rules'})
-
+    yak = YakAgent(cafe_id='Twist', rule_names={'restaurant':'json_menu'}, stream=True)
     from griptape.utils import Chat
-    Chat(yak).start()
+    Chat(yak.agent).start()

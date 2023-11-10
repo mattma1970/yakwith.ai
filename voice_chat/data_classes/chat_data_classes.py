@@ -39,19 +39,19 @@ class ModelDriverConfiguration:
     'stream' is used both by InferenceClient (params) and by griptape as a attribute.
     """
 
-    name: str = field()
-    model: str = field()
-    pretrained_tokenizer: str = field()
-    token: Optional[str] = field(kw_only=True)
+    name: str = field(default=None)
+    model: str = field(default=None)
+    pretrained_tokenizer: str = field(default=None)
+    token: Optional[str] = field(default=None,kw_only=True)
     # InferenceClient task specific parameters. e.g text_generation and TGI serving see huggingface_hub.inference._text_generation.TextGenerationParameters
-    params: Optional[Dict] = field(kw_only=True)
-    timeout: Optional[float] = field(kw_only=True)
-    headers: Optional[Dict[str, str]] = field(kw_only=True)
-    cookies: Optional[Dict[str, str]] = field(kw_only=True)
+    params: Optional[Dict] = field(default=None,kw_only=True)
+    timeout: Optional[float] = field(default=None,kw_only=True)
+    headers: Optional[Dict[str, str]] = field(default=None,kw_only=True)
+    cookies: Optional[Dict[str, str]] = field(default=None,kw_only=True)
 
-    task: Optional[str] = field()
-    stream: Optional[bool] = field(kw_only=True)
-    stream_chunk_size: Optional[int] = field(kw_only=True)
+    task: str = field(default=None,kw_only=True)
+    stream: Optional[bool] = field(default=None,kw_only=True)
+    stream_chunk_size: Optional[int] = field(default=None,kw_only=True)
 
     def __attrs_post_init__(self):
         """Catch a mis-match in stream setting if its specified anywhere."""
@@ -66,8 +66,8 @@ class ModelDriverConfiguration:
 
     @classmethod
     def from_omega_conf(cls, conf: DictConfig, force_interpolation: bool = True):
+        new_model_driver=ModelDriverConfiguration()
         for key in conf:
-            new_model_driver=ModelDriverConfiguration(None,None,None)
             if hasattr(new_model_driver, key):
                 _value = getattr(conf, key)
                 if type(_value) == DictConfig:
@@ -79,13 +79,13 @@ class ModelDriverConfiguration:
 
 @define
 class RuleList:
-    """Stringified rules for a restaurants and Agents. Makes it practical to save rules with OmegaConf"""
+    """Convenience class for loading list[Rules] saved with OmegaConf which can only save strings."""
 
-    name: Optional[str] = field(default="no_rules")
+    name: Optional[str] = field(default='yak_agent_rules', kw_only=True)
     rules: Optional[List[Rule]] = field(default=Factory(list), kw_only=True)
 
     @classmethod
-    def from_omega_conf(cls, conf: Dict):
+    def from_omega_conf(cls, conf: Dict) -> 'RuleList':
         new_rule_list=RuleList()
         for key in conf:
             if hasattr(new_rule_list, key):
@@ -112,8 +112,8 @@ class Menu:
             if not(len(res) == 1 and res[0] == value):
                 raise ValueError(f'{att} format for menu is not in form HH:MM')
             
-    cafe_id: str = field()
-    menu: str = field()
+    cafe_id: str = field(default=None)
+    menu: str = field(default=None)
     name: str = field(default=Factory(lambda: str(uuid4())),kw_only=True)
     type: str = field(default="all", kw_only=True)
     time_zone: str = field(default="Australia/Sydney", kw_only=True)
@@ -124,15 +124,12 @@ class Menu:
    
     @classmethod
     def from_omega_conf(cls, conf: DictConfig):
-        new_menu = Menu(None,None)
+        new_menu = Menu()
         for key in conf:
             if hasattr(new_menu, key):
                 _value = getattr(conf,key)
                 setattr(new_menu, key, _value)
         return new_menu
-    
-
-
 
 @define
 class MenuList:
