@@ -32,6 +32,20 @@ class AppParameters(BaseModel):
     params: Dict[str, str]
 
 
+class SessionStart(BaseModel):
+    """Message to create a new session and agent"""
+
+    cafe_id: str    
+    rule_names: Dict[str,str]
+    stream: bool
+    user_id: Optional[str] = None
+
+class SttTokenRequest(BaseModel):
+    """Request for temporary token for stt service"""
+    service_name: str
+    client_authorization_key: str
+
+
 @define
 class ModelDriverConfiguration:
     """

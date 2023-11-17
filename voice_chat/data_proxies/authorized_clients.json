@@ -1,0 +1,7 @@
+{
+  "authorized_clients": [
+    { "name": "user_1",
+      "authorization_key": "inpracticethiswillbesomecryptostuff",
+      "expiration": "2040-12-01" }
+  ]
+}

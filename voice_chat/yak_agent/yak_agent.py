@@ -35,6 +35,8 @@ class YakAgent:
         Helper class for creating Yak Chat Agent powered by custom griptape prompt driver HuggingFaceInferenceClientPromptDriver
         See dev branch https://github.com/mattma1970/griptape/tree/yak_dev
 
+        YakAgent configures the agent rules, prompt driver for LLM backend
+
         Attributes:
             cafe_id: A uid for the establishment. Primarily used to index configurations.
             model_driver_config: ModelDriverConfiguration object for prompt driver.
@@ -68,7 +70,7 @@ class YakAgent:
   
     task: Optional[str] = field(default='text_generation', kw_only=True)
     stream: Optional[bool] = field(default=False)
-    streaming_event_listeners: Optional[List[EventListener]] = field(init=False)
+    streaming_event_listeners: Optional[List[EventListener]] = field(default=None, kw_only=True)
     output_fn: Optional[Callable] = field(init=False)
     agent: Agent = field(init=False)
 
@@ -103,7 +105,8 @@ class YakAgent:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
 
-        """ self.agent = Agent(prompt_driver = HuggingFaceInferenceClientPromptDriver(
+        
+        self.agent = Agent(prompt_driver = HuggingFaceInferenceClientPromptDriver(
                                                 token=self.model_driver_config.token,
                                                 model = self.model_driver_config.model,
                                                 pretrained_tokenizer = self.model_driver_config.pretrained_tokenizer,
@@ -117,17 +120,25 @@ class YakAgent:
                         rules= self.rules,
                         stream=self.stream,
                         #tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
-        )"""
-        self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=True),
+        )
+        
+        """
+            self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=self.stream),
                             logger_level=logging.ERROR,
                             rules= self.rules,
                             stream=self.stream,)
-        pass
+        pass 
+        """
 
     def run(self,*args,**kwargs):
         return self.agent.run(*args,**kwargs)
     
 if __name__=='__main__':
-    yak = YakAgent(cafe_id='Twist', rule_names={'restaurant':'json_menu'}, stream=True)
+    yak = YakAgent(
+            cafe_id='Twist',
+            model_driver_config_name='zephyr_7B_model_driver',
+            rule_names={'restaurant':'json_menu','agent':'average_agent'},
+            stream=True
+        )
     from griptape.utils import Chat
     Chat(yak.agent).start()

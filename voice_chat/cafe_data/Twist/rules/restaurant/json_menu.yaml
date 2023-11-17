@@ -36,6 +36,7 @@ rules:
       "price": "23",
       "ingredients_list": ["Tomato", "Mozzarella", "Topped with basil & walnut pesto", "Mixed leaves", "Ciabatta"],
       "description": "Italian omelette with mozzarella and pesto"
+      "options": "we can replace the mixed leaves with beatroot salad"
     },
     {
       "dish": "Mexican Eggs - 23",

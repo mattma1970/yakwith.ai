@@ -1,0 +1,13 @@
+{
+    "service_configs": [
+      {
+        "name": "assemblyai",
+        "api_token": "assembly_token",
+        "duration": 6000
+      }],
+      "authorized_clients": [
+        { "name": "user_1",
+          "authorization_key": "user_1_key",
+          "expiration": "2040-12-01" }
+      ]
+}

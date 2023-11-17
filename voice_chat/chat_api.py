@@ -1,5 +1,8 @@
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+import requests
 
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator
@@ -13,9 +16,10 @@ import logging
 from datetime import time, datetime
 
 from voice_chat.yak_agent.yak_agent import YakAgent
-from voice_chat.data_classes.chat_data_classes import ApiUserMessage, AppParameters
+from voice_chat.data_classes.chat_data_classes import ApiUserMessage, AppParameters, SessionStart, SttTokenRequest
+from voice_chat.utils import DataProxy
 
-from griptape.structures import Agent, Run
+from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
@@ -31,22 +35,73 @@ from dataclasses import dataclass
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
 
 app=FastAPI()
+'''
+    Deal with CORS issues of browser calling browser from different ports or names.
+    https://fastapi.tiangolo.com/tutorial/cors/
+'''
+origins = [
+            'http://localhost',
+            'http://localhost:3000'
+           ]
+app.add_middleware(
+                    CORSMiddleware,
+                    allow_origins = origins,
+                    allow_credentials = True,
+                    allow_methods = ['*'],
+                    allow_headers = ["*"] )
+
 agent_registry = {}
 logger = logging.getLogger(__name__)
+
 
 def my_gen(response: Iterator[TextArtifact])->str:
     for chunk in response:
         yield chunk.value
 
-@app.get('/create_agent_session/')
-def create_agent_session(cafe_id: str,    
-                        agent_rules:str,
-                        user_id:Optional[str]=None)->Dict:
+
+@app.post('/get_temp_token')
+def get_temp_token(req: SttTokenRequest) -> Dict:
+    '''
+    Get time temporary token api token for requested stt service based on the service_configurations data. 
+    '''
+    temp_token = None
+    print('made it to the api')
+    # TODO Check that the request has a valid client authorization token
+    try:
+        service_config = DataProxy.get_3p_service_configs(
+            authorization_key=req.client_authorization_key,
+            authorization_data_source_name='authorized_clients',
+            service_name=req.service_name,
+            service_data_source_name='service_configs'  #assemblyai_temporary_token
+        )
+    except Exception as e:
+        raise RuntimeError(f'Failed to get service token. {req.service_name} {e}')
+    
+    headers = {
+                'Content-Type': 'application/json',
+                'Authorization': service_config['api_token']
+            }
+    r = requests.post(
+        url=service_config['api_endpoint'],
+        headers=headers,
+        data=json.dumps({"expires_in":service_config['duration']})
+    )
+    
+    if r.status_code == 200:
+        response = r.json()
+        temp_token = response['token']
+    
+    return {'temp_token':temp_token}
+
+
+@app.post('/create_agent_session/')
+def create_agent_session(config: SessionStart)->Dict:
     '''
     Create an instance of an Agent and save it to the agent_registry.
     Arguments:
         cafe_id: unique id for the cafe. Used to index menu, cafe policies
-        agent_rules_id: unique id for the rules
+        agent_rules: list of rules names for agent and restaurant
+        stream: boolean indicating if response from chat should be streamed back.
         user_id: a unique id for the user supplied by authentication tool.
     Returns:
         session_id: str(uuid4): the session_id under which the agent is registered.
@@ -54,14 +109,13 @@ def create_agent_session(cafe_id: str,
     yak_agent = None
     session_id = None
 
-    if user_id is not None:
+    if config.user_id is not None:
         raise NotImplementedError('User based customisation not yet implemented.')
     else:
         session_id = str(uuid4())
-        yak_agent = YakAgent(cafe_id,agent_rules_id)
-        # retrive menu
-        
-        yak_agent.agent.memory.add_run(Run(input='menu', output='ok'))
+        yak_agent = YakAgent(cafe_id=config.cafe_id,
+                             rule_names=config.rule_names,
+                             stream=config.stream)
 
     agent_registry[session_id]=yak_agent
     return {'session_id':session_id}
@@ -95,19 +149,7 @@ def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
 
 if __name__ == "__main__":
 
-    LLM_config_file: Optional[str] = field(default='voice_chat/configs/model_driver/default_model_driver.yaml')
-    agent_rules_id: Optional[str] = field(default='voice_chat/configs/rules/agent/default_rule_set.yaml')
-
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--menu_path',type=str, default='/home/mtman/Documents/Repos/llama/')
-    parser.add_argument('--model_path', type=str, default='llama-2-7b', help='Relative path to root_path')
-    parser.add_argument('--tokenizer_path', type=str, default='./tokenizer.model')
-    parser.add_argument('--temperature', type=float, default=0.6)
-    parser.add_argument('--top_p', type=float, default=0.4)
-    parser.add_argument('--max_seq_len',type=int, default=3000)
-    parser.add_argument('--max_gen_len',type=int, default=256)
-    parser.add_argument('--max_batch_size',type=int, default=4)
     parser.add_argument('--debug',action='store_true', default =False, help='Be far more chatty about the internals.')
     args = parser.parse_args()
 

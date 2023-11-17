@@ -1,0 +1,10 @@
+{
+  "service_configs": [
+    {
+      "name": "assemblyai_temp_token",
+      "api_token": "27144834145e4b95947a282421fa2a1e",
+      "api_endpoint" : "https://api.assemblyai.com/v2/realtime/token",
+      "duration": 6000
+    }
+  ]
+}
