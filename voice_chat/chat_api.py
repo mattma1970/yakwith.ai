@@ -14,11 +14,14 @@ import os
 import json
 import logging
 from datetime import time, datetime
+from dataclasses import dataclass
+
+import azure.cognitiveservices.speech as speechsdk
 
 from voice_chat.yak_agent.yak_agent import YakAgent
 from voice_chat.data_classes.chat_data_classes import ApiUserMessage, AppParameters, SessionStart, SttTokenRequest
 from voice_chat.utils import DataProxy
-
+from voice_chat.service.azure_TTS import AzureTextToSpeech
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import HuggingFaceInferenceClientPromptDriver
@@ -30,7 +33,6 @@ from griptape.memory.structure import Run
 
 from omegaconf import OmegaConf, DictConfig
 
-from dataclasses import dataclass
 
 _ALL_TASKS=['chat_with_agent:post','chat:post','llm_params:get']
 
@@ -146,6 +148,29 @@ def chat_using_agent(message: ApiUserMessage) -> Union[Any,Dict[str,str]]:
     else:
         response = yak.run(message.user_input).output.to_text()
         return {'data':response}
+    
+@app.post('/talk_with_agent')
+def talk_with_agent(message: ApiUserMessage) -> Dict:
+    '''
+    Get a synthesised voice for the stream LLM response and send that audio data back to the app.
+    '''
+    # Retrieve the Agent (and agent memory) if session already underway
+    session_id:str = message.session_id
+    if session_id not in agent_registry:
+        raise RuntimeError('No agent found. An agent must be created prior to starting chat.')
+    
+    yak: YakAgent = agent_registry[session_id]
+    if getattr(yak,'stream') is False:
+        raise RuntimeError('Talk with agent requires that the agent be configured for streaming.')
+    
+    TTS: AzureTextToSpeech = AzureTextToSpeech() # Can we make this global to improve latency??
+    message = []
+    response = Stream(yak.agent).run(message.user_input)
+    for sentance in TTS.audio_generator(response): 
+        TTS.speech_synthesizer.speak_text_async(sentance.value).get() # send to local speaker on server as per audio configuration.
+        message.append(sentance.value)
+    
+    return {'data':message}
 
 if __name__ == "__main__":
 

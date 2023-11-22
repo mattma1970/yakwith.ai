@@ -13,3 +13,5 @@ attrs
 tqdm
 aiohttp
 sentencepiece
+azure-cognitiveservices-speech
+dotenv
