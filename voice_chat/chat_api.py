@@ -127,7 +127,7 @@ def create_agent_session(config: SessionStart) -> Dict:
 
 
 @app.post("/chat_with_agent")
-def chat_using_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
+def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
     """
     Chat text_generation using griptape agent. Conversation memory is managed by Griptape so only the new question is passed in.
 
@@ -179,14 +179,22 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     )  # Can we make this global to improve latency??
     message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)
-    for phrase in TTS.audio_generator(response):
-        TTS.speech_synthesizer.speak_text_async(
-            phrase
-        ).get()  # send to local speaker on server as per audio configuration.
-        message_accumulator.append(phrase)
 
-    return {"data": message_accumulator}
+    """     for phrase in TTS.text_preprocessor(response):
+            TTS.send_audio_to_speaker(phrase)
+            message_accumulator.append(phrase) """
+    
+    def stream_generator(response):
+        for phrase in TTS.text_preprocessor(response):
+            stream = TTS.audio_stream_generator(phrase)
 
+            """ This yields a series of stream objects so we have a stream of streams. MUST CHECK IF THIS GOING TO CAUSE PROBLEMS AT THE CLIENT SIDE."""
+            yield stream.audio_data
+    
+    return StreamingResponse(stream_generator(response), media_type="text/stream-event")
+
+
+    #return {"data": message_accumulator}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
