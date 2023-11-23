@@ -1,3 +1,3 @@
 from .utils import DataProxy
 
-all = ['DataProxy']
+all = ["DataProxy"]
