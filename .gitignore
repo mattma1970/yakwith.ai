@@ -162,4 +162,4 @@ cython_debug/
 
 /models/*
 /data_proxies/*
-
+/openssl-1.1.1u/*

@@ -169,32 +169,28 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-    if getattr(yak, "stream") is False:
+    """ if getattr(yak, "stream") is False:
         raise RuntimeError(
             "Talk with agent requires that the agent be configured for streaming."
-        )
+        ) """
 
     TTS: AzureTextToSpeech = (
-        AzureTextToSpeech()
+        AzureTextToSpeech(audio_config=None)
     )  # Can we make this global to improve latency??
     message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)
 
-    """     for phrase in TTS.text_preprocessor(response):
-            TTS.send_audio_to_speaker(phrase)
-            message_accumulator.append(phrase) """
+    """ for phrase in TTS.text_preprocessor(response):
+        TTS.send_audio_to_speaker(phrase)
+        message_accumulator.append(phrase) """
     
     def stream_generator(response):
         for phrase in TTS.text_preprocessor(response):
             stream = TTS.audio_stream_generator(phrase)
-
-            """ This yields a series of stream objects so we have a stream of streams. MUST CHECK IF THIS GOING TO CAUSE PROBLEMS AT THE CLIENT SIDE."""
-            yield stream.audio_data
+            #print('Send sentance for audio to client:'+phrase)
+            yield stream.audio_data # SynthesisResponseResult
     
-    return StreamingResponse(stream_generator(response), media_type="text/stream-event")
-
-
-    #return {"data": message_accumulator}
+    return StreamingResponse(stream_generator(response), media_type="audio/mpeg")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

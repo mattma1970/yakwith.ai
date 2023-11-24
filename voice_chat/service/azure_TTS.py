@@ -2,6 +2,8 @@
     Note: the azure-cognitiveservices-speech sdk in ubuntu requires openssl 1.x and does not work for the default v3.0 in ubunt 22.04
     See installation instructions here. 
     https://learn.microsoft.com/en-us/azure/ai-services/speech-service/quickstarts/setup-platform?pivots=programming-language-python&tabs=linux%2Cubuntu%2Cdotnetcli%2Cdotnet%2Cjre%2Cmaven%2Cnodejs%2Cmac%2Cpypi
+    voices
+    https://learn.microsoft.com/en-gb/azure/ai-services/speech-service/language-support?tabs=stt#text-to-speech
 
 """
 
@@ -21,7 +23,7 @@ class AzureTextToSpeech:
     voice_id: str = field(default="en-US-JasonNeural", kw_only=False)
     audio_config: speechsdk.audio.AudioOutputConfig = field(
         default=speechsdk.audio.AudioOutputConfig(use_default_speaker=True),
-        kw_only=False,
+        kw_only=True,
     )  # can be overwritten
     tts_sentence_end: List = field(factory=list, kw_only=True)
     speech_synthesizer: speechsdk.SpeechSynthesizer = field(init=False)
@@ -35,6 +37,8 @@ class AzureTextToSpeech:
             subscription=os.getenv("AZURE_SPEECH_SERVICES_KEY"),
             region=os.getenv("AZURE_SPEECH_REGION"),
         )
+        speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3) #audio/mpeg
+        speech_config.speech_synthesis_voice_name = "en-AU-KimNeural"
         speech_config.set_property(
             speechsdk.PropertyId.Speech_LogFilename,
             "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs/TTS/log.log",
@@ -87,11 +91,15 @@ class AzureTextToSpeech:
         self.speech_synthesizer.speak_text_async(text).get()
 
     def audio_stream_generator(self, text: str) -> speechsdk.AudioDataStream:
-        """Generate speech and create an in-memory stream for returning to client."""
+        """
+            Generate speech and create an in-memory stream for returning to client.
+            https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/master/samples/python/console/speech_synthesis_sample.py
+        """
         if self.audio_config != None:
             raise RuntimeError(
                 "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream."
             )
+        #result = self.speech_synthesizer.speak_text_async(text).get()
         result = self.speech_synthesizer.speak_text_async(text).get()
-        stream = speechsdk.AudioDataStream(result)
+        stream = result #speechsdk.AudioDataStream(result)
         return stream
