@@ -17,6 +17,9 @@ import re
 
 MIN_LENGTH_FOR_SYNTHESIS = 5
 
+import logging
+
+logger = logging.getLogger('YakChatAPI')
 
 @define
 class AzureTextToSpeech:
@@ -30,6 +33,8 @@ class AzureTextToSpeech:
     full_message: str = field(init=False)
 
     def __attrs_post_init__(self):
+
+
         # tts sentence end mark used to find natural breaks for chunking data to send to TTS
         self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n"]
 
@@ -39,6 +44,7 @@ class AzureTextToSpeech:
         )
         speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3) #audio/mpeg
         speech_config.speech_synthesis_voice_name = "en-AU-KimNeural"
+        
         speech_config.set_property(
             speechsdk.PropertyId.Speech_LogFilename,
             "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs/TTS/log.log",
@@ -49,12 +55,18 @@ class AzureTextToSpeech:
         )  # TODO for testing only need to stream it back.
         self.full_message = ""
 
+        logger.debug(f'Creating Azure Speech Synthesizer. Config {speech_config}')
+
     def text_preprocessor(self, text_stream: Iterable[TextArtifact]):
-        """Accumulates the streaming text and yeilds at natural boundaries in the text.
-        Arguments:
-            text_stream. TextArtificat generator
-        Yields: text preprocess so that the chunk that is yeilded is split on natural boundaries such sentance end markers or list
         """
+            Accumulates the streaming text and yeilds at natural boundaries in the text.
+
+            Arguments:
+                text_stream. TextArtificat generator
+            Yields: 
+                text preprocess so that the chunk that is yeilded is split on natural boundaries such sentance end markers or list
+        """
+
         text_for_synth = ""
         for chunk in text_stream:
             text_chunk = chunk.value
@@ -71,14 +83,14 @@ class AzureTextToSpeech:
                     if (
                         text_for_synth != ""
                     ):  # if sentence only have \n or space, we could skip
-                        print(f"Speech synthesized partial text of: {text_for_synth}")
+                        logger.debug(f"Partial response text for synthesis: {text_for_synth}")
                         yield text_for_synth
                         text_for_synth = text_chunk[split:]
                 else:
                     text_for_synth += text_chunk
             else:
                 text_for_synth += text_chunk
-        """ Ensure somethgn is always returned in case text_stream isn't terminated by an end of sentance marker."""
+
         if text_for_synth != "":
             return text_for_synth
 
@@ -90,16 +102,22 @@ class AzureTextToSpeech:
             )
         self.speech_synthesizer.speak_text_async(text).get()
 
-    def audio_stream_generator(self, text: str) -> speechsdk.AudioDataStream:
+    def audio_stream_generator(self, text: str) -> speechsdk.SpeechSynthesisResult:
         """
-            Generate speech and create an in-memory stream for returning to client.
-            https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/master/samples/python/console/speech_synthesis_sample.py
+            Generate speech for the text passed in.
+            
+            Notes:
+                https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/master/samples/python/console/speech_synthesis_sample.py
+                Non-blocking but sends entire synthesized speech back rather than streaming back chunks.
+                This is acceptable when we are returning one sentance at a time. Otherwise latency will be an issue.
+            
+            Returns:
+                SpeechSynthesizerResult containing the data for the entire text.
         """
         if self.audio_config != None:
+            logger.error(f'Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream. audio_config must be set to None.')
             raise RuntimeError(
                 "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream."
             )
-        #result = self.speech_synthesizer.speak_text_async(text).get()
-        result = self.speech_synthesizer.speak_text_async(text).get()
-        stream = result #speechsdk.AudioDataStream(result)
-        return stream
+        result = self.speech_synthesizer.speak_text_async(text).get()  # non-blocking but doesn't fullfill promise until all speeech audio is generated.
+        return result

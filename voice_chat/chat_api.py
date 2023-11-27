@@ -15,16 +15,18 @@ import json
 import logging
 from datetime import time, datetime
 from dataclasses import dataclass
+from enum import Enum
 
 import azure.cognitiveservices.speech as speechsdk
 
-from voice_chat.yak_agent.yak_agent import YakAgent
+from voice_chat.yak_agent.yak_agent import YakAgent, YakStatus
 from voice_chat.data_classes.chat_data_classes import (
     ApiUserMessage,
     AppParameters,
     SessionStart,
     SttTokenRequest,
 )
+
 from voice_chat.utils import DataProxy
 from voice_chat.service.azure_TTS import AzureTextToSpeech
 from griptape.structures import Agent
@@ -37,7 +39,6 @@ from griptape.artifacts import TextArtifact
 from griptape.memory.structure import Run
 
 from omegaconf import OmegaConf, DictConfig
-
 
 _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
 
@@ -56,13 +57,10 @@ app.add_middleware(
 )
 
 agent_registry = {}
-logger = logging.getLogger(__name__)
-
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
     for chunk in response:
         yield chunk.value
-
 
 @app.post("/get_temp_token")
 def get_temp_token(req: SttTokenRequest) -> Dict:
@@ -70,7 +68,7 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
     Get time temporary token api token for requested stt service based on the service_configurations data.
     """
     temp_token = None
-    print("made it to the api")
+    logger.info("Request temporary STT token.")
     # TODO Check that the request has a valid client authorization token
     try:
         service_config = DataProxy.get_3p_service_configs(
@@ -80,6 +78,7 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
             service_data_source_name="service_configs",  # assemblyai_temporary_token
         )
     except Exception as e:
+        logger.error(f"Failed to get service token. {req.service_name} {e}")
         raise RuntimeError(f"Failed to get service token. {req.service_name} {e}")
 
     headers = {
@@ -93,6 +92,7 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
     )
 
     if r.status_code == 200:
+        logger.info('OK: Got temp STT token.')
         response = r.json()
         temp_token = response["token"]
 
@@ -114,6 +114,7 @@ def create_agent_session(config: SessionStart) -> Dict:
     yak_agent = None
     session_id = None
 
+    logger.info(f'Create agent session for: {config.cafe_id}')
     if config.user_id is not None:
         raise NotImplementedError("User based customisation not yet implemented.")
     else:
@@ -123,6 +124,7 @@ def create_agent_session(config: SessionStart) -> Dict:
         )
 
     agent_registry[session_id] = yak_agent
+    logger.info(f'Ok. Created agent for {config.cafe_id} with session_id {session_id}')
     return {"session_id": session_id}
 
 
@@ -139,9 +141,13 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
         RuntimeException if dialogs doesn't deserialize to a valid InferernceSessionPrompt
     """
 
+    logger.info(f'Request for text chat : sesssion_id {message.session_id}')
+    logger.debug(f'Request for text chat : sesssion_id {message.session_id}, user_input: {message.user_input}')
+
     # Retrieve the Agent (and agent memory) if session already underway
     session_id: str = message.session_id
     if session_id not in agent_registry:
+        logger.error(f'Error: Request for agent bound to session_id: {message.session_id} but none exists.')
         raise RuntimeError(
             "No agent found. An agent must be created prior to starting chat."
         )
@@ -149,46 +155,69 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
     yak: YakAgent = agent_registry[session_id]
 
     if getattr(yak, "stream"):
+        logger.debug(f'Request for text chat : sesssion_id {message.session_id} sending to streaming response to chat_with_agent request.')
         response = Stream(yak.agent).run(message.user_input)
         return StreamingResponse(my_gen(response), media_type="text/stream-event")
     else:
         response = yak.run(message.user_input).output.to_text()
+        logger.debug(f'Agent for sesssion_id {message.session_id} sending to NON-streaming response to chat_with_agent request.')
         return {"data": response}
 
-
-@app.post("/talk_with_agent")
-def talk_with_agent(message: ApiUserMessage) -> Dict:
+@app.post("/get_agent_to_say")
+def get_agent_to_say(message: ApiUserMessage) -> Dict:
     """
-    Get a synthesised voice for the stream LLM response and send that audio data back to the app.
+        Utility function to that gets the agent to say a particular message
     """
+    logger.info(f'Request for /get_agent_to_say : {message.user_input}')
     # Retrieve the Agent (and agent memory) if session already underway
     session_id: str = message.session_id
     if session_id not in agent_registry:
+        logger.error(f'Error: Request for agent bound to session_id: {session_id} but none exists.')
         raise RuntimeError(
             "No agent found. An agent must be created prior to starting chat."
         )
 
     yak: YakAgent = agent_registry[session_id]
-    """ if getattr(yak, "stream") is False:
-        raise RuntimeError(
-            "Talk with agent requires that the agent be configured for streaming."
-        ) """
 
     TTS: AzureTextToSpeech = (
         AzureTextToSpeech(audio_config=None)
-    )  # Can we make this global to improve latency??
+    ) 
+    
+    def stream_generator(prompt):
+            stream = TTS.audio_stream_generator(prompt)
+            yield stream.audio_data # Byte data
+    
+    logger.debug(f'Sending streaming response, session_id {session_id}')
+    return StreamingResponse(stream_generator(message.user_input), media_type="audio/mpeg")
+
+@app.post("/talk_with_agent")
+def talk_with_agent(message: ApiUserMessage) -> Dict:
+    """
+    Get a synthesised voice for the stream LLM response and send that audio data back to the app.
+    Forces streaming response regardless of Agent sessions.
+    """
+    logger.info(f'Request spoken conversation for session_id: {message.session_id}')
+    logger.debug(f'User input: {message.user_input}')
+
+    session_id: str = message.session_id
+    if session_id not in agent_registry:
+        logger.error(f'Error: Request for agent bound to session_id: {message.session_id} but none exists.')
+        raise RuntimeError(
+            "No agent found. An agent must be created prior to starting chat."
+        )
+
+    yak: YakAgent = agent_registry[session_id]
+
+    TTS: AzureTextToSpeech = (
+        AzureTextToSpeech(audio_config=None)
+    ) 
     message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)
-
-    """ for phrase in TTS.text_preprocessor(response):
-        TTS.send_audio_to_speaker(phrase)
-        message_accumulator.append(phrase) """
-    
+   
     def stream_generator(response):
         for phrase in TTS.text_preprocessor(response):
             stream = TTS.audio_stream_generator(phrase)
-            #print('Send sentance for audio to client:'+phrase)
-            yield stream.audio_data # SynthesisResponseResult
+            yield stream.audio_data # Byte data
     
     return StreamingResponse(stream_generator(response), media_type="audio/mpeg")
 
@@ -200,7 +229,29 @@ if __name__ == "__main__":
         default=False,
         help="Be far more chatty about the internals.",
     )
+    parser.add_argument(
+        "--log_root", type=str, default = '/home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs',  help = 'Root folder for the api logs'
+    )
+
     args = parser.parse_args()
+
+    logger = logging.getLogger('YakChatAPI')
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+
+    log_file_path = os.path.join(args.log_root,'session_logs.log')
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+
+    # Create formatters and add it to handlers
+    file_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_format)
+    console_handler.setFormatter(file_format)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
     import uvicorn
 

@@ -4,6 +4,7 @@ from typing import List, Optional, Union, Dict, Callable
 from dotenv import load_dotenv
 from attrs import define, field, Factory, validators
 from queue import Queue
+from enum import Enum
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -31,6 +32,13 @@ RULES_ROOT_PATH = "voice_chat/cafe_data"
 RULES_AGENT_FOLDER = "agent"
 RULE_RESTAURANT_FOLDER = "restaurant"
 RULES_PARENT_FOLDER = "rules"
+
+
+class YakStatus(Enum):
+    INITIALIZING = 0
+    IDLE = 1
+    GENERATING_TEXT = 2
+    SPEAKING = 3
 
 
 @define(kw_only=True)
@@ -82,6 +90,9 @@ class YakAgent:
     )
     output_fn: Optional[Callable] = field(init=False)
     agent: Agent = field(init=False)
+    agent_status: YakStatus = field(
+        default=YakStatus.IDLE
+    )  # Access via status property
 
     def __attrs_post_init__(self):
         try:
@@ -154,6 +165,17 @@ class YakAgent:
                             stream=self.stream,)
         pass 
         """
+
+        self.status = YakStatus.IDLE
+
+    @property
+    def status(self) -> YakStatus:
+        """Functions as a shared state for api functions."""
+        return self.agent_status
+
+    @status.setter
+    def status(self, value: YakStatus):
+        self.agent_status = value
 
     def run(self, *args, **kwargs):
         return self.agent.run(*args, **kwargs)
