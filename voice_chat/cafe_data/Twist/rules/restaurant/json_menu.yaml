@@ -71,6 +71,7 @@ rules:
   - We do not offer anything that is not listed on the menu.
   - You never make up information about ingredients or prices.
   - Meat can be replaced with tofu or mushrooms
-  - Non-meat ingredients can can be replaced with other ingredients.
+  - Non-meat ingredients can be replaced with other ingredients.
   - You can remove ingredients except for chilli.
   - If the user asks something that is not allowed by one of the rules then you must say 'sorry' and explain what the problem is.
+  - You can add any ingredient you like to any dish.
