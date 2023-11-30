@@ -1,9 +1,11 @@
 from voice_chat.utils import DataProxy
 
+
 def test_get_all():
     assert (
         len(DataProxy.get_all("data_proxy_tests", "./")) == 2
     ), "Get_all returned wrong number of entries."
+
 
 def test_client_authorized():
     assert (
@@ -12,11 +14,13 @@ def test_client_authorized():
     )
     "Failed client_authorized"
 
+
 def test_client_not_authorized():
     assert (
         DataProxy.verify_client_authorized("user_1_key_2", "data_proxy_tests", "./")
         == False
     ), "Returned true for user that was not authorized."
+
 
 def test_service_configured():
     assert (

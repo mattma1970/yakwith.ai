@@ -59,7 +59,9 @@ class AzureTextToSpeech:
 
         logger.debug(f"Creating Azure Speech Synthesizer. Config {speech_config}")
 
-    def text_preprocessor(self, text_stream: Iterable[TextArtifact], filter:str = None):
+    def text_preprocessor(
+        self, text_stream: Iterable[TextArtifact], filter: str = None
+    ):
         """
         Accumulates the streaming text and yeilds at natural boundaries in the text.
 
@@ -87,7 +89,9 @@ class AzureTextToSpeech:
                         text_for_synth != ""
                     ):  # if sentence only have \n or space, we could skip
                         if filter is not None:
-                            text_for_synth = remove_problem_chars(text_for_synth,filter)
+                            text_for_synth = remove_problem_chars(
+                                text_for_synth, filter
+                            )
                         logger.debug(
                             f"Partial response text for synthesis: {text_for_synth}"
                         )

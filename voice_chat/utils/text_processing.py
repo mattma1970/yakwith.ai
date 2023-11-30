@@ -33,17 +33,17 @@ def endpoint(root_url: str, func: str):
     return "/".join([root_url.strip("/"), func])
 
 
-def remove_problem_chars(text: str, acceptable_chars_pattern: str = '[^a-zA-Z0-9,. ]'):
+def remove_problem_chars(text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. ]"):
     """
-        Remove chars from text. Used in pre-processing text input to STT.
-        Args:
-            text: text to be filtered
-            accpetable_chars_pattern: str: a valid regex pattern for acceptable characters. All other will be filtered.
+    Remove chars from text. Used in pre-processing text input to STT.
+    Args:
+        text: text to be filtered
+        accpetable_chars_pattern: str: a valid regex pattern for acceptable characters. All other will be filtered.
     """
     pattern = re.compile(acceptable_chars_pattern)
     ret = text
     try:
-        ret = pattern.sub(lambda match: '',text)
+        ret = pattern.sub(lambda match: "", text)
     except Exception as e:
         logger.error(e)
     return ret

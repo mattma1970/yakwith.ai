@@ -237,7 +237,7 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter = "[^a-zA-Z0-9,. ]"):
+        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. ]"):
             stream = TTS.audio_stream_generator(phrase)
             yield stream.audio_data  # Byte data for whole sentance and the phrase
 
@@ -285,7 +285,9 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
 
     log_file_path = os.path.join(args.log_root, "session_logs.log")
-    file_handler =  RotatingFileHandler(log_file_path, mode = "a", maxBytes=1024*1024, backupCount=15)
+    file_handler = RotatingFileHandler(
+        log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
+    )
     file_handler.setLevel(logging.DEBUG)
 
     # Create formatters and add it to handlers
@@ -293,7 +295,6 @@ if __name__ == "__main__":
     file_handler.setFormatter(file_format)
 
     logger.addHandler(file_handler)
-
 
     import uvicorn
 
