@@ -13,6 +13,7 @@ import argparse
 import os
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from datetime import time, datetime
 from dataclasses import dataclass
 from enum import Enum
@@ -282,21 +283,17 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
-    logger.propagate = False
 
     log_file_path = os.path.join(args.log_root, "session_logs.log")
-    file_handler = logging.FileHandler(log_file_path)
+    file_handler =  RotatingFileHandler(log_file_path, mode = "a", maxBytes=1024*1024, backupCount=15)
     file_handler.setLevel(logging.DEBUG)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
 
     # Create formatters and add it to handlers
     file_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(file_format)
-    console_handler.setFormatter(file_format)
 
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+
 
     import uvicorn
 
