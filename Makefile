@@ -19,6 +19,7 @@ run_tgi_zephyr:
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id /data/zephyr \
 	--max-input-length 2000 --max-total-tokens 4000
+	
 run_ocr:
 	echo 'Run Tesseract OCR in docker on port 8885'
 	echo 'Run tesseract-server on port 8884 https://github.com/hertzg/tesseract-server'

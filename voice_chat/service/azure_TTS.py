@@ -12,6 +12,7 @@ import azure.cognitiveservices.speech as speechsdk
 from attrs import define, field
 from typing import List, Any, Dict, Generator, Iterable
 from griptape.artifacts import TextArtifact
+from voice_chat.utils.text_processing import remove_problem_chars
 
 import re
 
@@ -58,12 +59,13 @@ class AzureTextToSpeech:
 
         logger.debug(f"Creating Azure Speech Synthesizer. Config {speech_config}")
 
-    def text_preprocessor(self, text_stream: Iterable[TextArtifact]):
+    def text_preprocessor(self, text_stream: Iterable[TextArtifact], filter:str = None):
         """
         Accumulates the streaming text and yeilds at natural boundaries in the text.
 
         Arguments:
             text_stream. TextArtificat generator
+            filter: str: A valid regex that passes acceptable characters (useful for removing punctuation)
         Yields:
             text preprocess so that the chunk that is yeilded is split on natural boundaries such sentance end markers or list
         """
@@ -84,6 +86,8 @@ class AzureTextToSpeech:
                     if (
                         text_for_synth != ""
                     ):  # if sentence only have \n or space, we could skip
+                        if filter is not None:
+                            text_for_synth = remove_problem_chars(text_for_synth,filter)
                         logger.debug(
                             f"Partial response text for synthesis: {text_for_synth}"
                         )
@@ -95,7 +99,10 @@ class AzureTextToSpeech:
                 text_for_synth += text_chunk
 
         if text_for_synth != "":
-            return text_for_synth
+            if filter is not None:
+                return remove_problem_chars(text_for_synth, filter)
+            else:
+                return text_for_synth
 
     def send_audio_to_speaker(self, text: str) -> None:
         """send to local speaker on server as per audio configuration."""
