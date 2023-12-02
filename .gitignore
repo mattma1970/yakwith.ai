@@ -165,4 +165,5 @@ cython_debug/
 /openssl-1.1.1u/*
 cert.pem
 key.pem
-.gitignore
+docker-compose.yml
+voice_chat/db/*

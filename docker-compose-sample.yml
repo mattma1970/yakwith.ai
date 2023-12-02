@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:6-jammy
+    container_name: yakwithai_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: <<YOURUSERNAME>>
+      MONGO_INITDB_ROOT_PASSWORD: <<YOURPASSWORD>>
+    ports:
+      - '27017:27017'
+    volumes:
+      - ./voice_chat/db:/data/db
+  text-generation:
+      image: ghcr.io/huggingface/text-generation-inference:latest
+      command:
+        - --model-id
+        - /data/Mistral-7B-OpenOrca
+        - --max-input-length
+        - "2000"
+        - --max-total-tokens
+        - "4000"
+      ports:
+        - "8080:80"
+      volumes:
+        - /home/mtman/Documents/Repos/yakwith.ai/models:/data
+      deploy:
+        resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                capabilities: [gpu]
+  ocr:
+    image: hertzg/tesseract-server:latest
+    ports:
+      - 8885:8884
