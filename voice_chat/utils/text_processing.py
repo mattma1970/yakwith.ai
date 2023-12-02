@@ -33,7 +33,9 @@ def endpoint(root_url: str, func: str):
     return "/".join([root_url.strip("/"), func])
 
 
-def remove_problem_chars(text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. ]"):
+def remove_problem_chars(
+    text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. \s'?!]"
+):
     """
     Remove chars from text. Used in pre-processing text input to STT.
     Args:

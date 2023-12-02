@@ -50,14 +50,40 @@ AZURE_SPEECH_REGION  (text to speech)
 
 Note: assembly.ai (STT) if required here as a temporary token for use on the front end needs to be generated.
 
+### Running the dependant service
+Yakwith.ai backend uses TIG ( to serve models), tesseract server ( OCR) and mongoDB for persistant storage. Each of these services runs in docker.
+See docker-compose.yml for details and to update for your local file structure. 
+```
+docker-compose pull
+docker-compose up
+```
+
+TGI listens on port 8080
+Tesseract OCR on port 8885
+mongodb on port 27017
+
+
+Alternatively you can run them seperately with docker. For convenience the docker commands are included in the Makefile. 
+To run TGI:
+
 ``` 
 # from root directory 
 source .venv/bin/activate
 make run_tgi  # this will launch TGI and expose port 8080 for model serving.
 ```
 
-In a seperate terminal run
+### Launch the api
+
+The api isn't yet dockerized. To run it use the command run_api in the Makefile
+
 ```
 make run_api
 ```
+which will start the api on port 8884
+
+The api is build using fastAPI and so the api is has automatically generated documentation at http://localhost:8884/docs
+
+#### IMPORTANT
+If you are running the front end on any port other than 3000, then you'll need to add the URL where your front end is being served to the list of origins in the chat_api.py. Unless your URL is present in the list of origins, your requests will be blocked by the Cross Origin policies. 
+
 
