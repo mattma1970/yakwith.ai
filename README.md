@@ -40,13 +40,22 @@ Will replace local model inference with gpt-3.5-turbo. (You'll need to set the O
 
 ### Environment variables
 
-The following environment variables need to be set in the .env file in the root. Environment variable loading is handled by dotenv
+The following environment variables need to be set in the .env file in the voice_chat folder.
 
 OPENAI_API_KEY (if using OpenAi models)
 HUGGING_FACE_API_TOKEN  (if using HF models hosted by them)
 assembly_ai_api (used for speech to text)
 AZURE_SPEECH_SERVICES_KEY (text to speech)
 AZURE_SPEECH_REGION  (text to speech)
+
+
+A second env file at the root level (same level as the docker-compose.yml file if your using docker-compose).
+
+IMAGES_FOLDER = (folder where menu images will be stored)
+MONGODB_ROOT_FOLDER  (mongodb database files root)
+MODEL_FILE_FOLDER = (if using locally served models, this shoudl point to them)
+MONGO_INITDB_ROOT_USERNAME 
+MONGO_INITDB_ROOT_PASSWORD
 
 Note: assembly.ai (STT) if required here as a temporary token for use on the front end needs to be generated.
 

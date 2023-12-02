@@ -1,6 +1,8 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 
 import requests
 
@@ -59,6 +61,15 @@ app.add_middleware(
 )
 
 agent_registry = {}
+
+''' Mongo configuration'''
+# MongoDB configuration
+MONGO_DETAILS = "mongodb://localhost:27017"
+client = AsyncIOMotorClient(MONGO_DETAILS)
+database = client.images_database
+images_collection = database.get_collection("images_collection")
+MONGODB_IMAGE_FOLDER = 'Images'   # Folder in container. Must match with volume in docker-compose
+IMAGE_MENU_ROOT_FOLDER = '' # Path to local storage on host
 
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
@@ -262,6 +273,33 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 
     logger.debug(f"Last resposne for {session_id}, {last_response} ")
     return {"last": last_response}
+
+
+"""
+Deal with menus
+"""
+
+@app.post("/upload/{id}")
+async def upload_file(id: str, file: UploadFile = File(...)):
+    # Check if the file is an image
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File is not an image")
+
+    # Save the file to a temporary location
+    file_location = f"temp/{file.filename}"
+    with open(file_location, "wb") as buffer:
+        buffer.write(await file.read())
+
+    # Save the file information in MongoDB
+    image_data = {
+        "_id": ObjectId(id),
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "file_location": file_location
+    }
+    await images_collection.insert_one(image_data)
+
+    return {"info": "File saved", "id": id}
 
 
 if __name__ == "__main__":

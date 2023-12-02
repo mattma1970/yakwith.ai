@@ -4,12 +4,17 @@ services:
     image: mongo:6-jammy
     container_name: yakwithai_mongo
     environment:
-      MONGO_INITDB_ROOT_USERNAME: <<YOURUSERNAME>>
-      MONGO_INITDB_ROOT_PASSWORD: <<YOURPASSWORD>>
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_INITDB_ROOT_USERNAME}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_INITDB_ROOT_PASSWORD}"
     ports:
       - '27017:27017'
     volumes:
-      - ./voice_chat/db:/data/db
+      - type: bind
+        source: "${MONGODB_ROOT_FOLDER}"
+        target: /data/db
+      - type: bind
+        source: "${IMAGES_FOLDER}"
+        target: /data/images
   text-generation:
       image: ghcr.io/huggingface/text-generation-inference:latest
       command:
@@ -22,7 +27,9 @@ services:
       ports:
         - "8080:80"
       volumes:
-        - /home/mtman/Documents/Repos/yakwith.ai/models:/data
+        - type: bind
+          source: ${MODEL_FILE_FOLDER}
+          target: /data
       deploy:
         resources:
           reservations:
