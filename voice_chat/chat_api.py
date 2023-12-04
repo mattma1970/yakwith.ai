@@ -6,6 +6,7 @@ import requests
 import uuid
 import shutil
 from pathlib import Path
+import base64
 
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator, Tuple
@@ -36,6 +37,7 @@ from bson import ObjectId
 
 from voice_chat.utils import DataProxy
 from voice_chat.service.azure_TTS import AzureTextToSpeech
+
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import HuggingFaceInferenceClientPromptDriver
@@ -297,10 +299,33 @@ async def upload_menu(business_uid: str = Form(...), file: UploadFile = File(...
     new_menu = Mongo.Menu(menu_id = file_id,raw_image_rel_path=f"{file_id}{file_extension}")
 
     # Create or update the cafe with the new menu
-    ok, msg = Mongo.Ops.save_menu(mongo,business_uid,new_menu)
+    ok, msg = Mongo.Helper.save_menu(mongo,business_uid,new_menu)
 
     return {"status": "success" if ok else "erorr", "message": msg, "menu_id": new_menu.menu_id }
 
+
+@app.get("/menus/get_all/{business_uid}")
+async def menus_get_all(business_uid: str):
+    """Get all the menus """
+    menus: List[Mongo.Menu] = Mongo.Helper.get_menu_list(mongo, business_uid)
+    if len(menus)==0:
+        return {"status":"error","message":f"Failed getting menu list for business {business_uid}"}
+    else:
+        # Loop through the menus and insert the image data
+        for menu in menus:
+            if menu.raw_image_rel_path != "":
+                with open( f"{config.assets.image_folder}/{menu.raw_image_rel_path}","rb") as image_file:
+                    menu.raw_image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            if menu.ocr_image_rel_path:
+                with open( f"{config.assets.image_folder}/{menu.ocr_image_rel_path}","rb") as image_file:
+                    menu.raw_image_data = base64.b64encode(image_file.read()).decode('utf-8')
+        
+        return [Mongo.MenuModel.from_orm(menu) for menu in menus]
+
+@app.get("/menus/delete_one/{business_uid}/{menu_id}")
+async def menus_delete_one(business_uid: str, menu_id: str):
+    status, msg = Mongo.Helper.delete_one_menu(mongo, business_uid, menu_id )
+    return {"status":"success" if status == True else "error", "message": msg}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

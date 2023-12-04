@@ -1,15 +1,15 @@
 api:
-  port: 8884
+  port: 8884  # Port that fastAPI runs on
 
+# Credentials stored in .env
 database:
   url: localhost:27017
-  root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/db
   name: yak_test_db
   default_collection: cafes
 
 assets:
-  image_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/Images
-  model_folder: /home/mtman/Documents/Repos/yakwith.ai/models
+  image_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/Images   #Ensure this matches the folder mapped to the mongodb volume in .env
+  model_folder: /home/mtman/Documents/Repos/yakwith.ai/models   #Ensure this matches the folder mapped to the mongodb volume in .env
 
 logging: 
   root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs
