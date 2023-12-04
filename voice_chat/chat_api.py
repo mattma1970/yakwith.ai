@@ -1,16 +1,17 @@
-from fastapi import FastAPI, Response, File, UploadFile, HTTPException
+from fastapi import FastAPI, Response, File, UploadFile, HTTPException, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from bson import ObjectId
 
 import requests
+import uuid
+import shutil
+from pathlib import Path
 
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator, Tuple
 from dotenv import load_dotenv
 from uuid import uuid4
-from attr import define, field
+from attr import define, field, Factory
 import argparse
 import os
 import json
@@ -30,6 +31,8 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
 )
+import voice_chat.data_classes.mongo_classes as Mongo
+from bson import ObjectId
 
 from voice_chat.utils import DataProxy
 from voice_chat.service.azure_TTS import AzureTextToSpeech
@@ -47,11 +50,17 @@ from omegaconf import OmegaConf, DictConfig
 _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
 
 app = FastAPI()
+
 """
     Deal with CORS issues of browser calling browser from different ports or names.
     https://fastapi.tiangolo.com/tutorial/cors/
 """
-origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai"]
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "https://app.yakwith.ai"
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -60,22 +69,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-agent_registry = {}
-
-''' Mongo configuration'''
-# MongoDB configuration
-MONGO_DETAILS = "mongodb://localhost:27017"
-client = AsyncIOMotorClient(MONGO_DETAILS)
-database = client.images_database
-images_collection = database.get_collection("images_collection")
-MONGODB_IMAGE_FOLDER = 'Images'   # Folder in container. Must match with volume in docker-compose
-IMAGE_MENU_ROOT_FOLDER = '' # Path to local storage on host
-
+agent_registry = {} # Used to store one agent per session.
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
     for chunk in response:
         yield chunk.value
-
 
 @app.get("/test_connection")
 def test_connection():
@@ -153,13 +151,12 @@ def create_agent_session(config: SessionStart) -> Dict:
 def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
     """
     Chat text_generation using griptape agent. Conversation memory is managed by Griptape so only the new question is passed in.
-
-    Arguments:
-        message: ApiUserMessage : message with session_id and opt(user_id)
-    Returns:
-        {'data': results}: chat completion results as dictionary. Mimics response from direct call to the models API.
-    Raises:
-        RuntimeException if dialogs doesn't deserialize to a valid InferernceSessionPrompt
+        Arguments:
+            message: ApiUserMessage : message with session_id and opt(user_id)
+        Returns:
+            {'data': results}: chat completion results as dictionary. Mimics response from direct call to the models API.
+        Raises:
+            RuntimeException if dialogs doesn't deserialize to a valid InferernceSessionPrompt
     """
 
     logger.info(f"Request for text chat : sesssion_id {message.session_id}")
@@ -274,55 +271,56 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     logger.debug(f"Last resposne for {session_id}, {last_response} ")
     return {"last": last_response}
 
-
 """
 Deal with menus
 """
 
-@app.post("/upload/{id}")
-async def upload_file(id: str, file: UploadFile = File(...)):
-    # Check if the file is an image
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File is not an image")
+@app.post("/menus/upload/")
+async def upload_menu(business_uid: str = Form(...), file: UploadFile = File(...)) -> Dict[str,str]:
+    """ Save menu image to disk and add path to database. Returns the uuid of the menu. """
 
-    # Save the file to a temporary location
-    file_location = f"temp/{file.filename}"
-    with open(file_location, "wb") as buffer:
-        buffer.write(await file.read())
+    # TODO validate file.
+    # Check if the file is a PNG image
+    if file.content_type not in ["image/png","image/jpeg"]:
+        raise HTTPException(status_code=400, detail="File must be an image/png or image/jpeg")
 
-    # Save the file information in MongoDB
-    image_data = {
-        "_id": ObjectId(id),
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "file_location": file_location
-    }
-    await images_collection.insert_one(image_data)
+    file_extension = Path(file.filename).suffix
+    if file_extension not in ['.png', '.jpg', '.jpeg']:
+        raise HTTPException(status_code=400, detail="Invalid file extension. Only png,jpeg, jpg accepted.")
 
-    return {"info": "File saved", "id": id}
+    file_id = str(uuid.uuid4())
+    file_path = f"{config.assets.image_folder}/{file_id}{file_extension}"
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Create a Menu object with menu_id set to the file_id
+    new_menu = Mongo.Menu(menu_id = file_id,raw_image_rel_path=f"{file_id}{file_extension}")
+
+    # Create or update the cafe with the new menu
+    ok, msg = Mongo.Ops.save_menu(mongo,business_uid,new_menu)
+
+    return {"status": "success" if ok else "erorr", "message": msg, "menu_id": new_menu.menu_id }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="Be far more chatty about the internals.",
-    )
-    parser.add_argument(
-        "--log_root",
-        type=str,
-        default="/home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs",
-        help="Root folder for the api logs",
-    )
 
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default = "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml"
+    )
     args = parser.parse_args()
+
+    config = OmegaConf.load(args.config_path)
+    
+    # Instantiate Mongo class that provides API for pymongo interaction with mongodb.
+    mongo = Mongo.DatabaseConfig(config) 
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
 
-    log_file_path = os.path.join(args.log_root, "session_logs.log")
+    log_file_path = os.path.join(config.logging.root_folder, "session_logs.log")
     file_handler = RotatingFileHandler(
         log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
     )
@@ -334,6 +332,6 @@ if __name__ == "__main__":
 
     logger.addHandler(file_handler)
 
-    import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8884)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=config.api.port)

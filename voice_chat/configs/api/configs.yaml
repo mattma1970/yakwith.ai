@@ -1,1 +1,15 @@
-app
+api:
+  port: 8884
+
+database:
+  url: localhost:27017
+  root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/db
+  name: yak_test_db
+  default_collection: cafes
+
+assets:
+  image_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/Images
+  model_folder: /home/mtman/Documents/Repos/yakwith.ai/models
+
+logging: 
+  root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs
