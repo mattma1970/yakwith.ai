@@ -39,4 +39,8 @@ services:
   ocr:
     image: hertzg/tesseract-server:latest
     ports:
-      - 8885:8884
+      - ${OCR_PORT}:8884
+    volumes:
+      - type: bind
+        source: "${IMAGES_FOLDER}"
+        target: /data/images

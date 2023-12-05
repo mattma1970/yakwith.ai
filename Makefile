@@ -26,5 +26,5 @@ run_ocr:
 	docker run -p 8885:8884 hertzg/tesseract-server:latest
 
 run_api:
-	echo 'Run ya api on port localhost:8884 with ssl proxy for public IP ingress on 8885'
+	echo 'Run yak'' chat_api on port 8884'
 	python /home/mtman/Documents/Repos/yakwith.ai/voice_chat/chat_api.py

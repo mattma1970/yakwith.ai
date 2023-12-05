@@ -57,11 +57,7 @@ app = FastAPI()
     Deal with CORS issues of browser calling browser from different ports or names.
     https://fastapi.tiangolo.com/tutorial/cors/
 """
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "https://app.yakwith.ai"
-]
+origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,11 +67,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-agent_registry = {} # Used to store one agent per session.
+agent_registry = {}  # Used to store one agent per session.
+
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
     for chunk in response:
         yield chunk.value
+
 
 @app.get("/test_connection")
 def test_connection():
@@ -273,22 +271,31 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     logger.debug(f"Last resposne for {session_id}, {last_response} ")
     return {"last": last_response}
 
+
 """
 Deal with menus
 """
 
+
 @app.post("/menus/upload/")
-async def upload_menu(business_uid: str = Form(...), file: UploadFile = File(...)) -> Dict[str,str]:
-    """ Save menu image to disk and add path to database. Returns the uuid of the menu. """
+async def upload_menu(
+    business_uid: str = Form(...), file: UploadFile = File(...)
+) -> Dict[str, str]:
+    """Save menu image to disk and add path to database. Returns the uuid of the menu."""
 
     # TODO validate file.
     # Check if the file is a PNG image
-    if file.content_type not in ["image/png","image/jpeg"]:
-        raise HTTPException(status_code=400, detail="File must be an image/png or image/jpeg")
+    if file.content_type not in ["image/png", "image/jpeg"]:
+        raise HTTPException(
+            status_code=400, detail="File must be an image/png or image/jpeg"
+        )
 
     file_extension = Path(file.filename).suffix
-    if file_extension not in ['.png', '.jpg', '.jpeg']:
-        raise HTTPException(status_code=400, detail="Invalid file extension. Only png,jpeg, jpg accepted.")
+    if file_extension not in [".png", ".jpg", ".jpeg"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file extension. Only png,jpeg, jpg accepted.",
+        )
 
     file_id = str(uuid.uuid4())
     file_path = f"{config.assets.image_folder}/{file_id}{file_extension}"
@@ -296,36 +303,95 @@ async def upload_menu(business_uid: str = Form(...), file: UploadFile = File(...
         shutil.copyfileobj(file.file, buffer)
 
     # Create a Menu object with menu_id set to the file_id
-    new_menu = Mongo.Menu(menu_id = file_id,raw_image_rel_path=f"{file_id}{file_extension}")
+    new_menu = Mongo.Menu(
+        menu_id=file_id, raw_image_rel_path=f"{file_id}{file_extension}"
+    )
 
     # Create or update the cafe with the new menu
-    ok, msg = Mongo.Helper.save_menu(mongo,business_uid,new_menu)
+    ok, msg = Mongo.Helper.save_menu(mongo, business_uid, new_menu)
 
-    return {"status": "success" if ok else "erorr", "message": msg, "menu_id": new_menu.menu_id }
+    return {
+        "status": "success" if ok else "erorr",
+        "message": msg,
+        "menu_id": new_menu.menu_id,
+    }
 
 
 @app.get("/menus/get_all/{business_uid}")
 async def menus_get_all(business_uid: str):
-    """Get all the menus """
+    """Get all the menus"""
     menus: List[Mongo.Menu] = Mongo.Helper.get_menu_list(mongo, business_uid)
-    if len(menus)==0:
-        return {"status":"error","message":f"Failed getting menu list for business {business_uid}"}
+    if len(menus) == 0:
+        return {
+            "status": "error",
+            "message": f"Failed getting menu list for business {business_uid}",
+        }
     else:
         # Loop through the menus and insert the image data
         for menu in menus:
             if menu.raw_image_rel_path != "":
-                with open( f"{config.assets.image_folder}/{menu.raw_image_rel_path}","rb") as image_file:
-                    menu.raw_image_data = base64.b64encode(image_file.read()).decode('utf-8')
+                with open(
+                    f"{config.assets.image_folder}/{menu.raw_image_rel_path}", "rb"
+                ) as image_file:
+                    menu.raw_image_data = base64.b64encode(image_file.read()).decode(
+                        "utf-8"
+                    )
             if menu.ocr_image_rel_path:
-                with open( f"{config.assets.image_folder}/{menu.ocr_image_rel_path}","rb") as image_file:
-                    menu.raw_image_data = base64.b64encode(image_file.read()).decode('utf-8')
-        
+                with open(
+                    f"{config.assets.image_folder}/{menu.ocr_image_rel_path}", "rb"
+                ) as image_file:
+                    menu.raw_image_data = base64.b64encode(image_file.read()).decode(
+                        "utf-8"
+                    )
+
         return [Mongo.MenuModel.from_orm(menu) for menu in menus]
+
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
 async def menus_delete_one(business_uid: str, menu_id: str):
-    status, msg = Mongo.Helper.delete_one_menu(mongo, business_uid, menu_id )
-    return {"status":"success" if status == True else "error", "message": msg}
+    status, msg = Mongo.Helper.delete_one_menu(mongo, business_uid, menu_id)
+    return {"status": "success" if status == True else "error", "message": msg}
+
+
+@app.get("/menus/ocr/{business_uid}/{menu_id}")
+async def menu_ocr(business_uid: str, menu_id: str):
+    """Call the tesseract OCR endpoint see https://github.com/hertzg/tesseract-server"""
+
+    ret = None
+    url: str = config.ocr.url
+    data = {
+        "options": json.dumps(
+            {
+                "languages": ["eng"],
+                "dpi": 300,
+            }
+        )
+    }
+    file_path = f"{config.assets.image_folder}/{menu_id}.png"
+
+    try:
+        # Tesseract requires the file object to be passed in not the URL.
+        with open(file_path, "rb") as fp:
+            files = {"file": fp}
+            response = requests.post(url, data=data, files=files)
+            if response.ok:
+                ret = json.loads(response.text)
+                if (
+                    "stdout" in ret["data"]
+                ):  # contains messages. OCR text in response.content.stdout
+                    # Save it to db
+                    status, msg = Mongo.Helper.update_menu_field(
+                        mongo, business_uid, menu_id, ret["data"]["stdout"], "menu_text"
+                    )
+                else:
+                    logger.error(
+                        f'menu_ocr has not field "stdout" business {business_uid}: err {msg}'
+                    )
+    except Exception as e:
+        logger.error(f"Error in performing OCR. Message {e}")
+
+    return {"status": "success" if status == True else "error", "message": msg}
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -333,14 +399,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path",
         type=str,
-        default = "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml"
+        default="/home/mtman/Documents/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
     )
     args = parser.parse_args()
 
     config = OmegaConf.load(args.config_path)
-    
+
     # Instantiate Mongo class that provides API for pymongo interaction with mongodb.
-    mongo = Mongo.DatabaseConfig(config) 
+    mongo = Mongo.DatabaseConfig(config)
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
@@ -357,6 +423,6 @@ if __name__ == "__main__":
 
     logger.addHandler(file_handler)
 
-
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=config.api.port)

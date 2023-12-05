@@ -13,3 +13,6 @@ assets:
 
 logging: 
   root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs
+
+ocr:
+  url: http://localhost:8885/tesseract # Must ensure this matches the port specified in the environment variables used by docker-compose.
