@@ -32,7 +32,9 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
 )
-import voice_chat.data_classes.mongo_classes as Mongo
+from voice_chat.data_classes.data_models import Menu, Cafe
+from voice_chat.data_classes.mongodb_helper import Helper, DatabaseConfig
+
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy
@@ -303,12 +305,12 @@ async def upload_menu(
         shutil.copyfileobj(file.file, buffer)
 
     # Create a Menu object with menu_id set to the file_id
-    new_menu = Mongo.Menu(
+    new_menu: Menu = Menu(
         menu_id=file_id, raw_image_rel_path=f"{file_id}{file_extension}"
     )
 
     # Create or update the cafe with the new menu
-    ok, msg = Mongo.Helper.save_menu(mongo, business_uid, new_menu)
+    ok, msg = Helper.save_menu(database, business_uid, new_menu)
 
     return {
         "status": "success" if ok else "erorr",
@@ -316,15 +318,24 @@ async def upload_menu(
         "menu_id": new_menu.menu_id,
     }
 
+@app.get("/menus/get_one/{business_uid}/{menu_id}")
+async def menus_get_one(business_uid:str, menu_id: str):
+    menu: Menu = Helper.get_one_menu(database, business_uid, menu_id)
+    #if menu is not None:
+    #    menu = Helper.insert_images(config, menu)
+    return {"status":"success", "msg":"", "menu": menu.to_dict() if menu is not None else None }
+    
 
 @app.get("/menus/get_all/{business_uid}")
 async def menus_get_all(business_uid: str):
     """Get all the menus"""
-    menus: List[Mongo.Menu] = Mongo.Helper.get_menu_list(mongo, business_uid)
+    menus: List[Menu] = Helper.get_menu_list(database, business_uid)
     if len(menus) == 0:
+        # It might just be that there are none.
         return {
-            "status": "error",
+            "status": "warning",
             "message": f"Failed getting menu list for business {business_uid}",
+            "menus": []
         }
     else:
         # Loop through the menus and insert the image data
@@ -343,14 +354,21 @@ async def menus_get_all(business_uid: str):
                     menu.raw_image_data = base64.b64encode(image_file.read()).decode(
                         "utf-8"
                     )
+    return {"status":"success","msg":"","menus":[menu.to_dict() for menu in menus]}
 
-        return [Mongo.MenuModel.from_orm(menu) for menu in menus]
 
+@app.put("/menus/update_one/{business_uid}/{menu_id}")
+async def menus_update_one(business_uid:str, menu_id: str, menu: Menu):
+    """Update one menu in the cafe.menus. Menu contains optional fields, which, when absent leave the stored menu field unchanged. """
+    ok, msg = Helper.update_menu(database, business_uid, menu)
+    return {"status": "success" if ok == True else "error", "message": msg}
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
 async def menus_delete_one(business_uid: str, menu_id: str):
-    status, msg = Mongo.Helper.delete_one_menu(mongo, business_uid, menu_id)
-    return {"status": "success" if status == True else "error", "message": msg}
+    ok, msg = Helper.delete_one_menu(database, business_uid, menu_id)
+    return {"status": "success" if ok == True else "error", "message": msg}
+
+
 
 
 @app.get("/menus/ocr/{business_uid}/{menu_id}")
@@ -367,6 +385,8 @@ async def menu_ocr(business_uid: str, menu_id: str):
             }
         )
     }
+    # Need the file extension
+    menu: Menu =   Helper.get_one_menu(database, business_uid=business_uid, menu_id=menu_id)
     file_path = f"{config.assets.image_folder}/{menu_id}.png"
 
     try:
@@ -380,8 +400,8 @@ async def menu_ocr(business_uid: str, menu_id: str):
                     "stdout" in ret["data"]
                 ):  # contains messages. OCR text in response.content.stdout
                     # Save it to db
-                    status, msg = Mongo.Helper.update_menu_field(
-                        mongo, business_uid, menu_id, ret["data"]["stdout"], "menu_text"
+                    status, msg = Helper.update_menu_field(
+                        database, business_uid, menu_id, ret["data"]["stdout"], "menu_text"
                     )
                 else:
                     logger.error(
@@ -406,7 +426,7 @@ if __name__ == "__main__":
     config = OmegaConf.load(args.config_path)
 
     # Instantiate Mongo class that provides API for pymongo interaction with mongodb.
-    mongo = Mongo.DatabaseConfig(config)
+    database = DatabaseConfig(config)
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
