@@ -7,6 +7,10 @@ import uuid
 import shutil
 from pathlib import Path
 import base64
+import math
+
+from PIL import Image
+import io
 
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator, Tuple
@@ -32,7 +36,7 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
 )
-from voice_chat.data_classes.data_models import Menu, Cafe
+from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import Helper, DatabaseConfig
 
 from bson import ObjectId
@@ -301,12 +305,24 @@ async def upload_menu(
 
     file_id = str(uuid.uuid4())
     file_path = f"{config.assets.image_folder}/{file_id}{file_extension}"
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+
+    # create thumbnail to avoid sending large files back to client
+    content = await file.read()
+    image_stream = io.BytesIO(content)
+    raw_image = Image.open(image_stream)
+    raw_image.save(file_path)
+    image_stream.seek(0)
+    AR = raw_image.width / raw_image.height
+    lower_res_size = (math.floor(config.assets.thumbnail_image_width * AR), config.assets.thumbnail_image_width )
+    lowres_image = raw_image.resize(lower_res_size, Image.LANCZOS)
+    lowres_file_path = f"{config.assets.image_folder}/{file_id}_lowres{file_extension}"
+    lowres_image.save(lowres_file_path)
 
     # Create a Menu object with menu_id set to the file_id
     new_menu: Menu = Menu(
-        menu_id=file_id, raw_image_rel_path=f"{file_id}{file_extension}"
+        menu_id=file_id,
+        raw_image_rel_path=f"{file_id}{file_extension}",
+        thumbnail_image_rel_path=f"{file_id}_lowres{file_extension}",
     )
 
     # Create or update the cafe with the new menu
@@ -318,13 +334,18 @@ async def upload_menu(
         "menu_id": new_menu.menu_id,
     }
 
+
 @app.get("/menus/get_one/{business_uid}/{menu_id}")
-async def menus_get_one(business_uid:str, menu_id: str):
+async def menus_get_one(business_uid: str, menu_id: str):
     menu: Menu = Helper.get_one_menu(database, business_uid, menu_id)
-    #if menu is not None:
+    # if menu is not None:
     #    menu = Helper.insert_images(config, menu)
-    return {"status":"success", "msg":"", "menu": menu.to_dict() if menu is not None else None }
-    
+    return {
+        "status": "success",
+        "msg": "",
+        "menu": menu.to_dict() if menu is not None else None,
+    }
+
 
 @app.get("/menus/get_all/{business_uid}")
 async def menus_get_all(business_uid: str):
@@ -335,40 +356,28 @@ async def menus_get_all(business_uid: str):
         return {
             "status": "warning",
             "message": f"Failed getting menu list for business {business_uid}",
-            "menus": []
+            "menus": [],
         }
     else:
-        # Loop through the menus and insert the image data
-        for menu in menus:
-            if menu.raw_image_rel_path != "":
-                with open(
-                    f"{config.assets.image_folder}/{menu.raw_image_rel_path}", "rb"
-                ) as image_file:
-                    menu.raw_image_data = base64.b64encode(image_file.read()).decode(
-                        "utf-8"
-                    )
-            if menu.ocr_image_rel_path:
-                with open(
-                    f"{config.assets.image_folder}/{menu.ocr_image_rel_path}", "rb"
-                ) as image_file:
-                    menu.raw_image_data = base64.b64encode(image_file.read()).decode(
-                        "utf-8"
-                    )
-    return {"status":"success","msg":"","menus":[menu.to_dict() for menu in menus]}
+        # Insert thumbnail image data into the menu records before sending to client.
+        loaded_menus = Helper.insert_images(config, menus=menus, image_types=[ImageSelector.THUMBNAIL])
+        if (loaded_menus is None):
+            return {"status":"Warning", "message":"No thumbnail menus returned."}
+
+    return {"status": "success", "message": "", "menus": [menu.to_dict() for menu in loaded_menus]}
 
 
 @app.put("/menus/update_one/{business_uid}/{menu_id}")
-async def menus_update_one(business_uid:str, menu_id: str, menu: Menu):
-    """Update one menu in the cafe.menus. Menu contains optional fields, which, when absent leave the stored menu field unchanged. """
+async def menus_update_one(business_uid: str, menu_id: str, menu: Menu):
+    """Update one menu in the cafe.menus. Menu contains optional fields, which, when absent leave the stored menu field unchanged."""
     ok, msg = Helper.update_menu(database, business_uid, menu)
     return {"status": "success" if ok == True else "error", "message": msg}
+
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
 async def menus_delete_one(business_uid: str, menu_id: str):
     ok, msg = Helper.delete_one_menu(database, business_uid, menu_id)
     return {"status": "success" if ok == True else "error", "message": msg}
-
-
 
 
 @app.get("/menus/ocr/{business_uid}/{menu_id}")
@@ -386,7 +395,9 @@ async def menu_ocr(business_uid: str, menu_id: str):
         )
     }
     # Need the file extension
-    menu: Menu =   Helper.get_one_menu(database, business_uid=business_uid, menu_id=menu_id)
+    menu: Menu = Helper.get_one_menu(
+        database, business_uid=business_uid, menu_id=menu_id
+    )
     file_path = f"{config.assets.image_folder}/{menu_id}.png"
 
     try:
@@ -401,7 +412,11 @@ async def menu_ocr(business_uid: str, menu_id: str):
                 ):  # contains messages. OCR text in response.content.stdout
                     # Save it to db
                     status, msg = Helper.update_menu_field(
-                        database, business_uid, menu_id, ret["data"]["stdout"], "menu_text"
+                        database,
+                        business_uid,
+                        menu_id,
+                        ret["data"]["stdout"],
+                        "menu_text",
                     )
                 else:
                     logger.error(
