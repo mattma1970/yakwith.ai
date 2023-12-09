@@ -29,12 +29,13 @@ from datetime import datetime
 
 import azure.cognitiveservices.speech as speechsdk
 
-from voice_chat.yak_agent.yak_agent import YakAgent, YakStatus
+from voice_chat.yak_agents import YakAgent, YakStatus, ServiceAgent
 from voice_chat.data_classes.chat_data_classes import (
     ApiUserMessage,
     AppParameters,
     SessionStart,
     SttTokenRequest,
+    ServiceAgentRequest,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import Helper, DatabaseConfig
@@ -279,6 +280,36 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 
 
 """
+Misc
+"""
+
+
+@app.post("/service_agent/")
+def service_agent(request: ServiceAgentRequest) -> Dict:
+    """Generic LLM model response from service_agent."""
+    service_agent: ServiceAgent = None
+    response = None
+    ok = False
+    try:
+        service_agent: ServiceAgent = ServiceAgent(
+            task=request.task, stream=request.stream
+        )  # use defaults set on server.
+        response = service_agent.do_job(request.prompt)
+        ok = True
+    except Exception as e:
+        response = f"Error invoking service_agent: {e}"
+        logger.error(response)
+
+    if ok:
+        if request.stream:
+            return StreamingResponse(response)
+        else:
+            return {"status": "success", "msg": response}
+    else:
+        return {"status": "error", "msg": response}
+
+
+"""
 Deal with menus
 """
 
@@ -313,7 +344,10 @@ async def upload_menu(
     raw_image.save(file_path)
     image_stream.seek(0)
     AR = raw_image.width / raw_image.height
-    lower_res_size = (math.floor(config.assets.thumbnail_image_width * AR), config.assets.thumbnail_image_width )
+    lower_res_size = (
+        math.floor(config.assets.thumbnail_image_width * AR),
+        config.assets.thumbnail_image_width,
+    )
     lowres_image = raw_image.resize(lower_res_size, Image.LANCZOS)
     lowres_file_path = f"{config.assets.image_folder}/{file_id}_lowres{file_extension}"
     lowres_image.save(lowres_file_path)
@@ -360,11 +394,17 @@ async def menus_get_all(business_uid: str):
         }
     else:
         # Insert thumbnail image data into the menu records before sending to client.
-        loaded_menus = Helper.insert_images(config, menus=menus, image_types=[ImageSelector.THUMBNAIL])
-        if (loaded_menus is None):
-            return {"status":"Warning", "message":"No thumbnail menus returned."}
+        loaded_menus = Helper.insert_images(
+            config, menus=menus, image_types=[ImageSelector.THUMBNAIL]
+        )
+        if loaded_menus is None:
+            return {"status": "Warning", "message": "No thumbnail menus returned."}
 
-    return {"status": "success", "message": "", "menus": [menu.to_dict() for menu in loaded_menus]}
+    return {
+        "status": "success",
+        "message": "",
+        "menus": [menu.to_dict() for menu in loaded_menus],
+    }
 
 
 @app.put("/menus/update_one/{business_uid}/{menu_id}")
@@ -385,6 +425,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
     """Call the tesseract OCR endpoint see https://github.com/hertzg/tesseract-server"""
 
     ret = None
+    status: bool = False
     url: str = config.ocr.url
     data = {
         "options": json.dumps(

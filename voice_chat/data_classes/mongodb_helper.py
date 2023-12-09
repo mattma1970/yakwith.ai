@@ -81,13 +81,12 @@ class Helper:
                                 ).decode("utf-8")
                 except Exception as e:
                     logger.error("Failed to insert images into menu object: {e}")
-            
+
                 if isinstance(menus, Menu):
                     """If only a single Menu was passed in then return a Menu object"""
                     ret = _menus[0]
                 else:
                     ret = _menus
- 
 
         return ret
 

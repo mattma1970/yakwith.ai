@@ -48,6 +48,14 @@ class SttTokenRequest(BaseModel):
     client_authorization_key: str
 
 
+class ServiceAgentRequest(BaseModel):
+    """Getting a one time response from LLM API provider."""
+
+    task: Optional[str]
+    prompt: str
+    stream: bool
+
+
 @define
 class ModelDriverConfiguration:
     """
