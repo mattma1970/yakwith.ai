@@ -1,0 +1,4 @@
+
+The json below is useful as default prompt options for ai-enabled text editor.
+
+{ 'business_uid': 'dummy_business_uid', 'prompts': [{ 'label': 'Auto correct for menus', 'value': 'This text was extracted from an optical character recognition program and so it contains errors. The source is a menu for a cafe. Please correct the text using food and beverage related terms. Also, format the text to look nice.' }, { 'label': 'Make JSON format', 'value': 'Please convert this text to valid json format with keys menu_item, price, descriptions,other' }, { 'label': 'Multiple image merge fixup', 'value': 'The following text was extracted from multiple overlapping images of a menu and so there are duplicate menu times in the text. Also, there are errors in the text. Please fix the text so that menu items only appear once and correct and errors in the words taking account of the fact that this is a food and beverage menu' }] }

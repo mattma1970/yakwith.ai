@@ -6,6 +6,7 @@ database:
   url: localhost:27017
   name: yak_test_db
   default_collection: cafes
+  services_collection: services # Collection of miscellaneous tables (e.g for populating defaults)
 
 assets:
   image_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/Images   #Ensure this matches the folder mapped to the mongodb volume in .env

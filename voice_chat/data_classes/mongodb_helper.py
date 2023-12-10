@@ -11,6 +11,7 @@ from dataclasses import field  # pydantic.dataclasses doesn't ahve a field metho
 
 from omegaconf import OmegaConf
 import base64
+from itertools import chain
 
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 
@@ -30,9 +31,50 @@ class DatabaseConfig:
         )
         self.db = self.client[config.database.name]
         self.cafes = self.db[config.database.default_collection]
+        self.services = self.db[config.database.services_collection]
 
 
-class Helper:
+class ServicesHelper:
+    """
+    Miscellaneous CRUD functions used by the Services endpoints.
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_field_by_business_id(
+        cls,
+        config: DatabaseConfig,
+        *,
+        business_uid: str = None,
+        field: str = "",
+        flatten: bool = True,
+    ):
+        """
+        Get a list column from the passed in config (database).
+
+        @args:
+            config: DatabaseConfig : mongodb config
+            buisness_uid: business_uid for record
+            field: str: field to return
+            flatten: bool = True: if result is list of lists then flatten to simple list.
+        """
+        if not (config.services.find({f"{field}": {"$exists": True}})):
+            return None
+
+        if business_uid and isinstance(business_uid, str):
+            results = config.services.find({"business_uid": business_uid})
+            if results is not None and isinstance(results, Dict):
+                return results[field]
+            else:
+                ret: Any = [result[field] for result in results]
+                if flatten:
+                    ret = list(chain.from_iterable(ret))
+                return ret
+
+
+class MenuHelper:
     def __init__(self):
         pass
 

@@ -68,6 +68,7 @@ class ServiceAgent:
         try:
             if self.provider == Provider.OPENAI:
                 self.agent = Agent(
+                    memory=None,
                     prompt_driver=OpenAiChatPromptDriver(
                         temperature=0.8,
                         model=self.model,

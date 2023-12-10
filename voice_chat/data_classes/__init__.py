@@ -2,13 +2,14 @@ from .chat_data_classes import ApiUserMessage
 from .chat_data_classes import AppParameters
 from .chat_data_classes import ModelDriverConfiguration
 from .chat_data_classes import RuleList
-from .mongodb_helper import Helper, DatabaseConfig
+from .mongodb_helper import MenuHelper, DatabaseConfig, ServicesHelper
 
 __all__ = [
     "ApiUserMessage",
     "AppParameters",
     "ModelDriverConfiguration",
     "RuleList",
-    "Helper",
+    "MenuHelper",
     "DatabaseConfig",
+    "ServiceHelper",
 ]

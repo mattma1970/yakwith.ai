@@ -38,7 +38,11 @@ from voice_chat.data_classes.chat_data_classes import (
     ServiceAgentRequest,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
-from voice_chat.data_classes.mongodb_helper import Helper, DatabaseConfig
+from voice_chat.data_classes.mongodb_helper import (
+    MenuHelper,
+    DatabaseConfig,
+    ServicesHelper,
+)
 
 from bson import ObjectId
 
@@ -57,6 +61,7 @@ from griptape.memory.structure import Run
 from omegaconf import OmegaConf, DictConfig
 
 _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
+_DEFAULT_BUSINESS_UID = "all"
 
 app = FastAPI()
 
@@ -284,7 +289,26 @@ Misc
 """
 
 
-@app.post("/service_agent/")
+@app.get("/services/get_ai_prompts/{businessUID}")
+async def services_get_ai_prompts(businessUID: str) -> Dict:
+    """Get ai prompts for text editing"""
+
+    prompts: List[str] = ServicesHelper.get_field_by_business_id(
+        database, business_uid=businessUID, field="prompts"
+    )
+    if prompts is not None:
+        return {"status": "success", "msg": "", "payload": prompts}
+    else:
+        prompts = ServicesHelper.get_field_by_business_id(
+            database, business_uid=_DEFAULT_BUSINESS_UID, field="prompts"
+        )
+        if prompts is not None:
+            return {"status": "success", "msg": "", "payload": prompts}
+
+    return {"status": "error", "msg": "No prompts found", "payload": "--none--"}
+
+
+@app.post("/services/service_agent/")
 def service_agent(request: ServiceAgentRequest) -> Dict:
     """Generic LLM model response from service_agent."""
     service_agent: ServiceAgent = None
@@ -360,7 +384,7 @@ async def upload_menu(
     )
 
     # Create or update the cafe with the new menu
-    ok, msg = Helper.save_menu(database, business_uid, new_menu)
+    ok, msg = MenuHelper.save_menu(database, business_uid, new_menu)
 
     return {
         "status": "success" if ok else "erorr",
@@ -371,7 +395,7 @@ async def upload_menu(
 
 @app.get("/menus/get_one/{business_uid}/{menu_id}")
 async def menus_get_one(business_uid: str, menu_id: str):
-    menu: Menu = Helper.get_one_menu(database, business_uid, menu_id)
+    menu: Menu = MenuHelper.get_one_menu(database, business_uid, menu_id)
     # if menu is not None:
     #    menu = Helper.insert_images(config, menu)
     return {
@@ -384,7 +408,7 @@ async def menus_get_one(business_uid: str, menu_id: str):
 @app.get("/menus/get_all/{business_uid}")
 async def menus_get_all(business_uid: str):
     """Get all the menus"""
-    menus: List[Menu] = Helper.get_menu_list(database, business_uid)
+    menus: List[Menu] = MenuHelper.get_menu_list(database, business_uid)
     if len(menus) == 0:
         # It might just be that there are none.
         return {
@@ -394,7 +418,7 @@ async def menus_get_all(business_uid: str):
         }
     else:
         # Insert thumbnail image data into the menu records before sending to client.
-        loaded_menus = Helper.insert_images(
+        loaded_menus = MenuHelper.insert_images(
             config, menus=menus, image_types=[ImageSelector.THUMBNAIL]
         )
         if loaded_menus is None:
@@ -410,13 +434,13 @@ async def menus_get_all(business_uid: str):
 @app.put("/menus/update_one/{business_uid}/{menu_id}")
 async def menus_update_one(business_uid: str, menu_id: str, menu: Menu):
     """Update one menu in the cafe.menus. Menu contains optional fields, which, when absent leave the stored menu field unchanged."""
-    ok, msg = Helper.update_menu(database, business_uid, menu)
+    ok, msg = MenuHelper.update_menu(database, business_uid, menu)
     return {"status": "success" if ok == True else "error", "message": msg}
 
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
 async def menus_delete_one(business_uid: str, menu_id: str):
-    ok, msg = Helper.delete_one_menu(database, business_uid, menu_id)
+    ok, msg = MenuHelper.delete_one_menu(database, business_uid, menu_id)
     return {"status": "success" if ok == True else "error", "message": msg}
 
 
@@ -436,7 +460,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
         )
     }
     # Need the file extension
-    menu: Menu = Helper.get_one_menu(
+    menu: Menu = MenuHelper.get_one_menu(
         database, business_uid=business_uid, menu_id=menu_id
     )
     file_path = f"{config.assets.image_folder}/{menu_id}.png"
@@ -452,7 +476,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
                     "stdout" in ret["data"]
                 ):  # contains messages. OCR text in response.content.stdout
                     # Save it to db
-                    status, msg = Helper.update_menu_field(
+                    status, msg = MenuHelper.update_menu_field(
                         database,
                         business_uid,
                         menu_id,
