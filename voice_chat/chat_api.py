@@ -36,6 +36,7 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
     ServiceAgentRequest,
+    MenuImageRecord
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
@@ -100,7 +101,7 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
     """
     temp_token = None
     logger.info("Request temporary STT token.")
-    # TODO Check that the request has a valid client authorization token
+    # TODO Check that the has a valid client authorization token
     try:
         service_config = DataProxy.get_3p_service_configs(
             authorization_key=req.client_authorization_key,
@@ -190,14 +191,14 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
 
     if getattr(yak, "stream"):
         logger.debug(
-            f"Request for text chat : sesssion_id {message.session_id} sending to streaming response to chat_with_agent request."
+            f"Request for text chat : sesssion_id {message.session_id} sending to streaming response to chat_with_agent "
         )
         response = Stream(yak.agent).run(message.user_input)
         return StreamingResponse(my_gen(response), media_type="text/stream-event")
     else:
         response = yak.run(message.user_input).output.to_text()
         logger.debug(
-            f"Agent for sesssion_id {message.session_id} sending to NON-streaming response to chat_with_agent request."
+            f"Agent for sesssion_id {message.session_id} sending to NON-streaming response to chat_with_agent "
         )
         return {"data": response}
 
@@ -288,7 +289,6 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 Misc
 """
 
-
 @app.get("/services/get_ai_prompts/{businessUID}")
 async def services_get_ai_prompts(businessUID: str) -> Dict:
     """Get ai prompts for text editing"""
@@ -309,7 +309,7 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 
 
 @app.post("/services/service_agent/")
-def service_agent(request: ServiceAgentRequest) -> Dict:
+def service_agent( request: ServiceAgentRequest) -> Dict:
     """Generic LLM model response from service_agent."""
     service_agent: ServiceAgent = None
     response = None
@@ -340,9 +340,9 @@ Deal with menus
 
 @app.post("/menus/upload/")
 async def upload_menu(
-    business_uid: str = Form(...), file: UploadFile = File(...)
-) -> Dict[str, str]:
-    """Save menu image to disk and add path to database. Returns the uuid of the menu."""
+    business_uid: str = Form(...), file:UploadFile = File(...), grp_id:Optional[str] = Form(...)
+):
+    """Save menu image to disk and add path to database. Returns the uuid of the menu and a collection_id for grouping multiple pages"""
 
     # TODO validate file.
     # Check if the file is a PNG image
@@ -377,8 +377,18 @@ async def upload_menu(
     lowres_image.save(lowres_file_path)
 
     # Create a Menu object with menu_id set to the file_id
+    sequence_number: int = 0
+    # Check for null-like values tha may occur when frontend passes non-initialized grp_id
+    if grp_id is None or grp_id == 'null' or grp_id == '':
+        # This is a new collection so we need to create a collection id.
+        _grp_id = str(uuid.uuid4())
+    else:
+        _grp_id= grp_id
+        sequence_number = MenuHelper.count_menus_in_collection(database, business_uid, grp_id)  # use as base-0 sequnce for images in the same collection
+
     new_menu: Menu = Menu(
         menu_id=file_id,
+        collection = {'grp_id':_grp_id,'sequence_number': sequence_number},
         raw_image_rel_path=f"{file_id}{file_extension}",
         thumbnail_image_rel_path=f"{file_id}_lowres{file_extension}",
     )
@@ -389,7 +399,7 @@ async def upload_menu(
     return {
         "status": "success" if ok else "erorr",
         "message": msg,
-        "menu_id": new_menu.menu_id,
+        "payload": {"menu_id":new_menu.menu_id,"grp_id":_grp_id}
     }
 
 
@@ -488,6 +498,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
                         f'menu_ocr has not field "stdout" business {business_uid}: err {msg}'
                     )
     except Exception as e:
+        msg = e
         logger.error(f"Error in performing OCR. Message {e}")
 
     return {"status": "success" if status == True else "error", "message": msg}

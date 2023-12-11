@@ -166,3 +166,4 @@ cython_debug/
 cert.pem
 key.pem
 voice_chat/db/*
+voice_chat/Images/*

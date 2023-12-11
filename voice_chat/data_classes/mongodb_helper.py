@@ -308,3 +308,18 @@ class MenuHelper:
             msg = f"Error updating one menu: {e}"
             logger.error(msg)
         return ok, msg
+
+    @classmethod
+    def count_menus_in_collection(
+        cls, db: DatabaseConfig, business_uid: str, grp_id:str
+    ) -> int:
+        if grp_id and len(grp_id) <= 10:   # TODO - hack to detect whether a UUID4 str wasn't passed in.
+            return 0
+        else:
+            count: int = 0
+            cafe: Cafe = cls.get_cafe(db, business_uid=business_uid)
+            if len(cafe.menus)>0:
+                menus: List[Menu] = [menu for menu in cafe.menus if 'grp_id' in menu.collection and menu.collection['grp_id']==grp_id]
+                count = len(menus)
+            return len(menus)
+            

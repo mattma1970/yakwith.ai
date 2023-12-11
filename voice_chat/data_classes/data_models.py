@@ -18,7 +18,6 @@ Note images are stored outside the database and the data is inserted JIT as need
 
 """
 
-
 class ImageSelector(Enum):
     RAW = 0
     THUMBNAIL = 1
@@ -27,7 +26,12 @@ class ImageSelector(Enum):
 
 @dataclass(kw_only=True)
 class Menu:
+    """ 
+        A single image menu. 'collection' is used to group multiple pages 
+        into a single menu. The Menu with collection.sequence_number == 1 is used to store collected text for all pages. 
+    """
     menu_id: str = field(default_factory=lambda: str(uuid4()))
+    collection: Optional[Dict[str,str]]= field(default_factory=lambda: {'grp_id':'','sequence_number':0}) # For grouping multi-image menus
     name: str = "No name set"
     raw_image_rel_path: Optional[str] = ""
     raw_image_data: Optional[str] = ""
@@ -41,7 +45,7 @@ class Menu:
 
     @validator("valid_time_range", pre=True, each_item=True)
     def set_utc_timezone(cls, v):
-        """Force datetime to be timezone aware and use UTC if no timezone is specified."""
+        """Force datetime to be timezone aware and use UTC if no timezone is specified. TZ info is lost when sending from front end."""
         if isinstance(v, datetime) and v.tzinfo is None:
             return v.replace(tzinfo=timezone.utc)
         return v
@@ -50,6 +54,7 @@ class Menu:
         # Convert Menu instance to dictionary
         return {
             "menu_id": self.menu_id,
+            "collection": self.collection,
             "name": self.name,
             "raw_image_rel_path": self.raw_image_rel_path,
             "raw_image_data": self.raw_image_data,
@@ -67,6 +72,7 @@ class Menu:
         # Create Menu instance from dictionary
         return cls(
             menu_id=data.get("menu_id"),
+            collection = data.get("collection",{}),
             name=data.get("name", ""),
             raw_image_rel_path=data.get("raw_image_rel_path", ""),
             raw_image_data=data.get("raw_image_data", ""),
