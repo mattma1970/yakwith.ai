@@ -36,7 +36,6 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
     ServiceAgentRequest,
-    MenuImageRecord
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
@@ -289,6 +288,7 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 Misc
 """
 
+
 @app.get("/services/get_ai_prompts/{businessUID}")
 async def services_get_ai_prompts(businessUID: str) -> Dict:
     """Get ai prompts for text editing"""
@@ -309,7 +309,7 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 
 
 @app.post("/services/service_agent/")
-def service_agent( request: ServiceAgentRequest) -> Dict:
+def service_agent(request: ServiceAgentRequest) -> Dict:
     """Generic LLM model response from service_agent."""
     service_agent: ServiceAgent = None
     response = None
@@ -340,7 +340,9 @@ Deal with menus
 
 @app.post("/menus/upload/")
 async def upload_menu(
-    business_uid: str = Form(...), file:UploadFile = File(...), grp_id:Optional[str] = Form(...)
+    business_uid: str = Form(...),
+    file: UploadFile = File(...),
+    grp_id: Optional[str] = Form(...),
 ):
     """Save menu image to disk and add path to database. Returns the uuid of the menu and a collection_id for grouping multiple pages"""
 
@@ -379,16 +381,18 @@ async def upload_menu(
     # Create a Menu object with menu_id set to the file_id
     sequence_number: int = 0
     # Check for null-like values tha may occur when frontend passes non-initialized grp_id
-    if grp_id is None or grp_id == 'null' or grp_id == '':
+    if grp_id is None or grp_id == "null" or grp_id == "":
         # This is a new collection so we need to create a collection id.
         _grp_id = str(uuid.uuid4())
     else:
-        _grp_id= grp_id
-        sequence_number = MenuHelper.count_menus_in_collection(database, business_uid, grp_id)  # use as base-0 sequnce for images in the same collection
+        _grp_id = grp_id
+        sequence_number = MenuHelper.count_menus_in_collection(
+            database, business_uid, grp_id
+        )  # use as base-0 sequnce for images in the same collection
 
     new_menu: Menu = Menu(
         menu_id=file_id,
-        collection = {'grp_id':_grp_id,'sequence_number': sequence_number},
+        collection={"grp_id": _grp_id, "sequence_number": sequence_number},
         raw_image_rel_path=f"{file_id}{file_extension}",
         thumbnail_image_rel_path=f"{file_id}_lowres{file_extension}",
     )
@@ -399,7 +403,32 @@ async def upload_menu(
     return {
         "status": "success" if ok else "erorr",
         "message": msg,
-        "payload": {"menu_id":new_menu.menu_id,"grp_id":_grp_id}
+        "payload": {"menu_id": new_menu.menu_id, "grp_id": _grp_id},
+    }
+
+
+@app.get("/menus/collate_images/{business_uid}/{grp_id}")
+def menus_collate_images(business_uid: str, grp_id: str):
+    """Collate the text from all the menu partial images belonging to the collection identified by grp_id"""
+    ok = False
+    msg: str = ""
+    count: int = -1
+    primary_menu_id: str = ""
+
+    ok, msg, count, primary_menu_id = MenuHelper.collate_text(
+        database, business_uid, grp_id
+    )
+    if ok:
+        logger.info(f"Collated text from {count} images into menu_id {primary_menu_id}")
+    else:
+        logger.error(
+            f"Failure during collation of text from multiple images for menu.collection.grp_id {grp_id}"
+        )
+
+    return {
+        "status": "success" if ok else "erorr",
+        "message": msg,
+        "payload": {"primary_menu_id": primary_menu_id},
     }
 
 

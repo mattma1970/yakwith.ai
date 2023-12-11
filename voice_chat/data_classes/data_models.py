@@ -18,6 +18,7 @@ Note images are stored outside the database and the data is inserted JIT as need
 
 """
 
+
 class ImageSelector(Enum):
     RAW = 0
     THUMBNAIL = 1
@@ -26,12 +27,15 @@ class ImageSelector(Enum):
 
 @dataclass(kw_only=True)
 class Menu:
-    """ 
-        A single image menu. 'collection' is used to group multiple pages 
-        into a single menu. The Menu with collection.sequence_number == 1 is used to store collected text for all pages. 
     """
+    A single image menu. 'collection' is used to group multiple pages
+    into a single menu. The Menu with collection.sequence_number == 1 is used to store collected text for all pages.
+    """
+
     menu_id: str = field(default_factory=lambda: str(uuid4()))
-    collection: Optional[Dict[str,str]]= field(default_factory=lambda: {'grp_id':'','sequence_number':0}) # For grouping multi-image menus
+    collection: Optional[Dict[str, str]] = field(
+        default_factory=lambda: {"grp_id": "", "sequence_number": 0}
+    )  # For grouping multi-image menus
     name: str = "No name set"
     raw_image_rel_path: Optional[str] = ""
     raw_image_data: Optional[str] = ""
@@ -72,7 +76,7 @@ class Menu:
         # Create Menu instance from dictionary
         return cls(
             menu_id=data.get("menu_id"),
-            collection = data.get("collection",{}),
+            collection=data.get("collection", {}),
             name=data.get("name", ""),
             raw_image_rel_path=data.get("raw_image_rel_path", ""),
             raw_image_data=data.get("raw_image_data", ""),

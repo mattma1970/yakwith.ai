@@ -285,7 +285,10 @@ class MenuHelper:
     def update_menu(
         cls, db: DatabaseConfig, business_uid: str, updated_menu: Menu
     ) -> Tuple[bool, str]:
-        """Update a single menu. Menu contains optional fields and so if these are not present, then the value if the menu to be updated is applied"""
+        """
+            Update a single menu. Menu contains optional fields and so if these are
+            not present, then the current value of the menu to be kept.
+        """
         ok: bool = False
         msg: str = ""
         try:
@@ -311,15 +314,84 @@ class MenuHelper:
 
     @classmethod
     def count_menus_in_collection(
-        cls, db: DatabaseConfig, business_uid: str, grp_id:str
+        cls, db: DatabaseConfig, business_uid: str, grp_id: str
     ) -> int:
-        if grp_id and len(grp_id) <= 10:   # TODO - hack to detect whether a UUID4 str wasn't passed in.
+        if (
+            grp_id and len(grp_id) <= 10
+        ):  # TODO - hack to detect whether a UUID4 str wasn't passed in.
             return 0
         else:
             count: int = 0
             cafe: Cafe = cls.get_cafe(db, business_uid=business_uid)
-            if len(cafe.menus)>0:
-                menus: List[Menu] = [menu for menu in cafe.menus if 'grp_id' in menu.collection and menu.collection['grp_id']==grp_id]
+            if len(cafe.menus) > 0:
+                menus: List[Menu] = [
+                    menu
+                    for menu in cafe.menus
+                    if "grp_id" in menu.collection
+                    and menu.collection["grp_id"] == grp_id
+                ]
                 count = len(menus)
             return len(menus)
-            
+
+    @classmethod
+    def collate_text(
+        cls, db: DatabaseConfig, business_uid: str, grp_id: str
+    ) -> Tuple[bool, str, int, str]:
+        """
+        Collect the text from all Menu records in the same grp and collate them in the Menu
+        with collection.sequence_number == 0
+
+        @args:
+            db: database
+            business_uid: str : global identifier of the current business being used.
+            grp_id: str: group identifier for the collaction of images belonging to the same menu. menu.collection.grp_id
+        @returns:
+            ok: bool : success status of operation
+            msg: str: error message, if any
+            count: int: the number of images in the collection
+            primary_menu_id: the menu_id of the menu in the collection that has sequence_numer == 0
+        """
+
+        menus: List[Menu] = cls.get_menu_list(db, business_uid)
+        if len(menus) == 0:
+            return (
+                False,
+                f"No business found with business_uid == {business_uid}",
+                0,
+                "",
+            )
+
+        def robust_filter(x: Menu) -> bool:
+            if "grp_id" in x.collection:
+                return x.collection["grp_id"] == grp_id
+            else:
+                return False
+
+        primary_menu_id: str = ""
+        menus = list(
+            filter(lambda x: robust_filter(x), menus)
+        )  # Filter out menus that might not have a group_id (legacy)
+        sorted_menus = sorted(
+            menus, key=lambda x: int(x.collection["sequence_number"])
+        )  # Ensure they are in ascending seqeunce_number order ( the order they were added)
+        if len(sorted_menus) > 0:
+            primary_menu_id = sorted_menus[0].menu_id
+
+        all_text = "".join([menu.menu_text for menu in sorted_menus])
+        count = len(menus)
+        ok: bool = False
+        msg: str = ""
+
+        ok, msg = cls.update_menu_field(
+            db,
+            business_uid=business_uid,
+            menu_id=primary_menu_id,
+            value=all_text,
+            field="menu_text",
+        )
+        if not (ok):
+            count = 0
+            primary_menu_id = ""
+            logger.error(f"collate_text failed for grp_id=={grp_id} ")
+
+        return True, msg, count, primary_menu_id

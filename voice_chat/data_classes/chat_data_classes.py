@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 
 from fastapi import UploadFile
 
+
 class ApiUserMessage(BaseModel):
     """Message sent from App"""
 
@@ -55,13 +56,6 @@ class ServiceAgentRequest(BaseModel):
     task: Optional[str]
     prompt: str
     stream: bool
-
-class MenuImageRecord(BaseModel):
-    """Class for sending images of menu pages. """
-    business_uid: str
-    file: UploadFile
-    grp_id: Optional[str]
-
 
 @define
 class ModelDriverConfiguration:
