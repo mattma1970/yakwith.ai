@@ -445,7 +445,7 @@ async def menus_get_one(business_uid: str, menu_id: str):
 
 
 @app.get("/menus/get_all/{business_uid}")
-async def menus_get_all(business_uid: str):
+async def menus_get_all(business_uid: str, for_display:bool = True):
     """Get all the menus"""
     menus: List[Menu] = MenuHelper.get_menu_list(database, business_uid)
     if len(menus) == 0:

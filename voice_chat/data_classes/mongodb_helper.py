@@ -168,11 +168,30 @@ class MenuHelper:
         return ret
 
     @classmethod
-    def get_menu_list(cls, db: DatabaseConfig, business_uid: str) -> List[Menu]:
+    def get_menu_list(cls, db: DatabaseConfig, business_uid: str, for_display: bool = True) -> List[Menu]:
+        """
+            Get the list of menus for a given business.
+            
+            @args:
+                for_display: bool: if True then only the primary menus in a collection will be shown.
+                                   i.e. those with menu.collection.seqeunce_number>0 will be filtered out.
+            @returns:
+                filtered list of Menu objects.
+            """
         ret: List[Menu] = []
         try:
             cafe: Cafe = cls.get_cafe(db, business_uid)
             ret = cafe.menus
+            if for_display:
+                def robust_filter(x:Menu):
+                    if 'sequence_number' in x.collection:
+                        if int(x.collection['sequence_number']) == 0:
+                            return True
+                        else:
+                            return False
+                    else:
+                        return True # include menus that are not members of a collection
+                ret = list(filter(lambda x: robust_filter(x), ret))
         except Exception as e:
             logger.warning(f"DB record for cafe {business_uid} not found: {e}")
         return ret
