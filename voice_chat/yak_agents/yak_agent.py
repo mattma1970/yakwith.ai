@@ -54,8 +54,7 @@ class YakAgent:
         model_driver_config: ModelDriverConfiguration object for prompt driver.
         model_driver_config_name: filename of the yaml configuration file for prompt driver. If model_driver_config is specified, this is ignored.
 
-        rule_names: Rules are distributed for Yak and this Dict contains the leaf folder and yaml filenames of the collection of rules.
-        rules : A RuleList used to collect the distributed rules. If rules are passed in the rule_names is ignored.
+        rules : str: Concatenated list of all text to be permanently saved to the LLM context (survives LLM context pruning in Griptape)
 
         user_id: a uid for the user if provided. Reserved for personalisation feature in the future.
         task: the function name of the InferenceClient task that will be served.
@@ -76,11 +75,11 @@ class YakAgent:
                         f"Only {RULES_AGENT_FOLDER},{RULE_RESTAURANT_FOLDER} are permitted keys for rules config file locations."
                     )
 
-    cafe_id: str = field(default="default", kw_only=True)
+    business_uid: str = field(default="default", kw_only=True)
     model_driver_config_name: Optional[str] = field(default="default_model_driver")
     model_driver_config: Optional[ModelDriverConfiguration] = field(default=None)
-    rule_names: Optional[Dict] = field(default=Factory(dict), validator=[check_keys])
-    rules: Optional[list[Rule]] = field(default=Factory(list))
+    rule_names: Optional[Dict] = field(default=Factory(dict))  #TODO remove. deprecated after adding mongo backend
+    rules: Optional[list[str]] = field(default=Factory(list))
     user_id: Optional[str] = field(default=None)
 
     task: Optional[str] = field(default="text_generation", kw_only=True)
@@ -105,25 +104,7 @@ class YakAgent:
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
                     OmegaConf.load(config_filename)
                 )
-
-            if (
-                len(self.rules) == 0
-            ):  # TODO create a rulehandler to enable different backend storage of rules.
-                for rule_key, rule_file_name in self.rule_names.items():
-                    _conf = os.path.join(
-                        RULES_ROOT_PATH,
-                        self.cafe_id,
-                        RULES_PARENT_FOLDER,
-                        rule_key,
-                        rule_file_name,
-                    )
-                    if ".yaml" not in _conf:
-                        _conf += ".yaml"
-                    _rule_list = RuleList.from_omega_conf(OmegaConf.load(_conf))
-                    if len(self.rules) == 0:
-                        self.rules = _rule_list.rules
-                    else:
-                        self.rules.extend(_rule_list.rules)
+               
         except Exception as e:
             raise RuntimeError(f"Error loading agent related config file: {e}")
 
@@ -153,7 +134,7 @@ class YakAgent:
             ),
             # event_listeners=self.streaming_event_listeners,
             logger_level=logging.ERROR,
-            rules=self.rules,
+            rules=[Rule(rule) for rule in self.rules],
             stream=self.stream,
             # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
         )
@@ -182,12 +163,13 @@ class YakAgent:
 
 
 if __name__ == "__main__":
-    yak = YakAgent(
-        cafe_id="Twist",
-        model_driver_config_name="zephyr_7B_model_driver",
-        rule_names={"restaurant": "json_menu", "agent": "average_agent"},
-        stream=True,
-    )
-    from griptape.utils import Chat
+    """     yak = YakAgent(
+            cafe_id="Twist",
+            model_driver_config_name="zephyr_7B_model_driver",
+            rule_names={"restaurant": "json_menu", "agent": "average_agent"},
+            stream=True,
+        )
+        from griptape.utils import Chat
 
-    Chat(yak.agent).start()
+        Chat(yak.agent).start() """
+    pass

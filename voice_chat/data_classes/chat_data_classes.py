@@ -35,11 +35,12 @@ class AppParameters(BaseModel):
 
 
 class SessionStart(BaseModel):
-    """Message to create a new session and agent"""
-
-    cafe_id: str
-    rule_names: Dict[str, str]
-    stream: bool
+    """Message to create a new chat bot"""
+    session_id: str
+    business_uid: str
+    menu_id: str
+    avatar_personality: Optional[str] # free text describing the avatars personality and behaviour.
+    stream: bool #whether responses should be streamed back.
     user_id: Optional[str] = None
 
 

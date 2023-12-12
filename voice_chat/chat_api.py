@@ -63,6 +63,7 @@ from omegaconf import OmegaConf, DictConfig
 
 _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
 _DEFAULT_BUSINESS_UID = "all"
+_MENU_RULE_PREFIX = "Below is the menu for a cafe:\n\n"
 
 app = FastAPI()
 
@@ -130,34 +131,65 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
 
     return {"temp_token": temp_token}
 
+@app.get("/agent/reservation/")
+def agent_reservation():
+    """
+        Create a placeholder in the agent registry and return a session_id. 
+        The agent will be created when the conversatino starts.
+    """
+    session_id: str = str(uuid4())
+    logger.info(f'Session ID {session_id} reserved')   # TODO add time limit for session_id to expire.
+    agent_registry[session_id] = None
+    return {
+        'session_id': session_id
+    }
 
-@app.post("/create_agent_session")
-def create_agent_session(config: SessionStart) -> Dict:
+@app.post("/agent/create/")
+def agent_create(config: SessionStart) -> Dict:
     """
     Create an instance of an Agent and save it to the agent_registry.
     Arguments:
-        cafe_id: unique id for the cafe. Used to index menu, cafe policies
-        agent_rules: list of rules names for agent and restaurant
+        business_uid: unique id for the cafe.
+        menu_id: unique ID of menu for the business.
+        agent_rules: contains house rules, menu rules, agent personality rules as concatenated 
+                    list of strings. Rules are preserved in LLM context even during conversation memory pruning.
         stream: boolean indicating if response from chat should be streamed back.
         user_id: a unique id for the user supplied by authentication tool.
     Returns:
         session_id: str(uuid4): the session_id under which the agent is registered.
     """
     yak_agent = None
-    session_id = None
+    msg: str = ''
+    ok: bool = False
 
-    logger.info(f"Create agent session for: {config.cafe_id}")
-    if config.user_id is not None:
-        raise NotImplementedError("User based customisation not yet implemented.")
-    else:
-        session_id = str(uuid4())
-        yak_agent = YakAgent(
-            cafe_id=config.cafe_id, rule_names=config.rule_names, stream=config.stream
-        )
+    try:
+        cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
+        menu: Menu = MenuHelper.get_one_menu(database, business_uid=config.business_uid, menu_id=config.menu_id)
+        if menu is None:
+            return {'status':'error','msg':f'Menu {config.menu_id} not found','payload':''}
+        
+        logger.info(f"Creating agent for: {config.business_uid} in {config.session_id}")
+        
+        if config.user_id is not None:
+            raise NotImplementedError("User based customisation not yet implemented.")
+        else:
+            rule_set: List[str] = [_MENU_RULE_PREFIX+'\n'+menu.menu_text]
+            rule_set.extend(menu.rules.split('\n'))
+            rule_set.extend(cafe.house_rules)
+            rule_set.extend(config.avatar_personality.split('\n'))
+            rule_set = list(filter(lambda x: len(x.strip())>0, rule_set))
+ 
+            yak_agent = YakAgent(
+                business_uid=config.business_uid, rules=rule_set, stream=config.stream
+            )
 
-    agent_registry[session_id] = yak_agent
-    logger.info(f"Ok. Created agent for {config.cafe_id} with session_id {session_id}")
-    return {"session_id": session_id}
+        agent_registry[config.session_id] = yak_agent
+        logger.info(f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}")
+        ok = True
+    except Exception as e:
+        msg = f'A problem occured while creating a yak_agent: {e}'
+        logger.error(msg)
+    return {"status":"success" if ok else "error", "msg":msg, "payload":""}
 
 
 @app.post("/chat_with_agent")
@@ -258,7 +290,7 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. ]"):
+        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
             stream = TTS.audio_stream_generator(phrase)
             yield stream.audio_data  # Byte data for whole sentance and the phrase
 
@@ -496,7 +528,7 @@ def menus_get_as_options(business_uid: str, encoded_utc_time: str):
             if "start" in menu.valid_time_range and "end" in menu.valid_time_range:
                 # Check if time of day falls within the valid time range.
                 if (
-                    menu.valid_time_range["start"].date()
+                    menu.valid_time_range["start"].date() 
                     != menu.valid_time_range["end"]
                 ):
                     # time range straddles 2 different days.
