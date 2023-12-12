@@ -57,6 +57,7 @@ class ServiceAgentRequest(BaseModel):
     prompt: str
     stream: bool
 
+
 @define
 class ModelDriverConfiguration:
     """

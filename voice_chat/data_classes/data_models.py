@@ -85,7 +85,9 @@ class Menu:
             ocr_image_rel_path=data.get("ocr_image_rel_path", ""),
             ocr_image_data=data.get("ocr_image_data", ""),
             menu_text=data.get("menu_text", ""),
-            valid_time_range=data.get("valid_time_range", {}),   #stores dates as ISODate. When retrieve they are automatically converted to datetime.datetime by pymongo
+            valid_time_range=data.get(
+                "valid_time_range", {}
+            ),  # stores dates as ISODate. When retrieve they are automatically converted to datetime.datetime by pymongo
             rules=data.get("rules", ""),
         )
 

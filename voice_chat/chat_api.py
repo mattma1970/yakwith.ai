@@ -446,7 +446,7 @@ async def menus_get_one(business_uid: str, menu_id: str):
 
 
 @app.get("/menus/get_all/{business_uid}")
-async def menus_get_all(business_uid: str, for_display:bool = True):
+async def menus_get_all(business_uid: str, for_display: bool = True):
     """Get all the menus"""
     menus: List[Menu] = MenuHelper.get_menu_list(database, business_uid)
     if len(menus) == 0:
@@ -470,44 +470,58 @@ async def menus_get_all(business_uid: str, for_display:bool = True):
         "menus": [menu.to_dict() for menu in loaded_menus],
     }
 
+
 @app.get("/menus/get_as_options/{business_uid}/{encoded_utc_time}")
-def menus_get_as_options( business_uid: str, encoded_utc_time: str):
-    """ Get all menus and choose a default based on the menu time of day validity and the passed in time.
-        Note: 
-            All dates in Yak are stored as UTC time. Conversion to local time is consumer responsibility
-            encoded_utc_time may not contain the postfix Z but it wall alwasy be assumed to be in UTC time.
+def menus_get_as_options(business_uid: str, encoded_utc_time: str):
+    """Get all menus and choose a default based on the menu time of day validity and the passed in time.
+    Note:
+        All dates in Yak are stored as UTC time. Conversion to local time is consumer responsibility
+        encoded_utc_time may not contain the postfix Z but it wall alwasy be assumed to be in UTC time.
     """
 
-    menus: List[Menu] = MenuHelper.get_menu_list(database, business_uid, for_display=True)
-    decoded_utc_time: str = urllib.parse.unquote(encoded_utc_time).rstrip('Z') # Drop the ISO 8601 explict maker for UTC time.
-    utc_time: datetime = datetime.fromisoformat(decoded_utc_time) #UTC time
-    default_menu_id: str = ''
-    options: List[Dict[str,str]] = []
-    msg: str = ''
+    menus: List[Menu] = MenuHelper.get_menu_list(
+        database, business_uid, for_display=True
+    )
+    decoded_utc_time: str = urllib.parse.unquote(encoded_utc_time).rstrip(
+        "Z"
+    )  # Drop the ISO 8601 explict maker for UTC time.
+    utc_time: datetime = datetime.fromisoformat(decoded_utc_time)  # UTC time
+    default_menu_id: str = ""
+    options: List[Dict[str, str]] = []
+    msg: str = ""
 
-    if len(menus)>0: # Get the first valid one and make it the default.
+    if len(menus) > 0:  # Get the first valid one and make it the default.
         for menu in menus:
-            options.append({'label':menu.name, 'value':menu.menu_id})
-            if 'start' in menu.valid_time_range and 'end' in menu.valid_time_range:
-                # Check if time of day falls within the valid time range. 
-                if menu.valid_time_range['start'].date()!=menu.valid_time_range['end']:
+            options.append({"label": menu.name, "value": menu.menu_id})
+            if "start" in menu.valid_time_range and "end" in menu.valid_time_range:
+                # Check if time of day falls within the valid time range.
+                if (
+                    menu.valid_time_range["start"].date()
+                    != menu.valid_time_range["end"]
+                ):
                     # time range straddles 2 different days.
-                    if utc_time.time()<=menu.valid_time_range['end'].time() or utc_time.time()>=menu.valid_time_range['start'].time():
+                    if (
+                        utc_time.time() <= menu.valid_time_range["end"].time()
+                        or utc_time.time() >= menu.valid_time_range["start"].time()
+                    ):
                         default_menu_id = menu.menu_id
                         break
-                else: # same day 
-                    if utc_time.time()<=menu.valid_time_range['end'].time() and utc_time.time()>=menu.valid_time_range['start'].time():
+                else:  # same day
+                    if (
+                        utc_time.time() <= menu.valid_time_range["end"].time()
+                        and utc_time.time() >= menu.valid_time_range["start"].time()
+                    ):
                         default_menu_id = menu.menu_id
                         break
     else:
-        msg = 'No menus returned.'
-        logger.warning(f'No menus found for business_uid = {business_uid}')
+        msg = "No menus returned."
+        logger.warning(f"No menus found for business_uid = {business_uid}")
 
     return {
-        'status': 'success' if len(menus)>0 else 'warning',
-        'msg': msg,
-        'payload': {'options':options,'default':default_menu_id} 
-      }
+        "status": "success" if len(menus) > 0 else "warning",
+        "msg": msg,
+        "payload": {"options": options, "default": default_menu_id},
+    }
 
 
 @app.put("/menus/update_one/{business_uid}/{menu_id}")
