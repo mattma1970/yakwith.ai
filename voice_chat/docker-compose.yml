@@ -10,10 +10,10 @@ services:
       - '27017:27017'
     volumes:
       - type: bind
-        source: "${MONGODB_ROOT_FOLDER}"
+        source: "${APPLICATION_ROOT_FOLDER}/${MONGODB_ROOT_FOLDER}"
         target: /data/db
       - type: bind
-        source: "${IMAGES_FOLDER}"
+        source: "${APPLICATION_ROOT_FOLDER}/${IMAGES_FOLDER}"
         target: /data/images
   text-generation:
       image: ghcr.io/huggingface/text-generation-inference:latest
@@ -28,7 +28,7 @@ services:
         - "8080:80"
       volumes:
         - type: bind
-          source: ${MODEL_FILE_FOLDER}
+          source: ${APPLICATION_ROOT_FOLDER}/${MODEL_FILE_FOLDER}
           target: /data
       deploy:
         resources:
@@ -42,5 +42,5 @@ services:
       - ${OCR_PORT}:8884
     volumes:
       - type: bind
-        source: "${IMAGES_FOLDER}"
+        source: "${APPLICATION_ROOT_FOLDER}/${IMAGES_FOLDER}"
         target: /data/images

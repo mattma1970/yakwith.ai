@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-MODEL_DRIVER_ROOT_PATH = "voice_chat/configs/model_driver"
+
 RULES_ROOT_PATH = "voice_chat/cafe_data"
 RULES_AGENT_FOLDER = "agent"
 RULE_RESTAURANT_FOLDER = "restaurant"
@@ -99,7 +99,7 @@ class YakAgent:
                 if ".yaml" not in self.model_driver_config_name:
                     self.model_driver_config_name += ".yaml"
                 config_filename = os.path.join(
-                    MODEL_DRIVER_ROOT_PATH, self.model_driver_config_name
+                    f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}", self.model_driver_config_name
                 )
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
                     OmegaConf.load(config_filename)
