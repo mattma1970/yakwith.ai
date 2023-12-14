@@ -2,10 +2,11 @@
 
 A fastAPI backend for locally hosted voicebots. Its designed to work with the (react.js front-end)[https://github.com/mattma1970/yak_react_frontend].
 
-As at 30/11/23 it is configured to use:
+As at 14/12/23 it is configured to use:
 * Azure Congnitive Services for Text-to-Speech;
 * a custom version of (griptape.ai)[http://griptape.ai] modified to support locally hosted huggingface models (see below)
 * models served locally using Huggingfacen's TGI LLM inference server running in docker. 
+* OpenAI used for AI-powered text editiing in the textEditor frontend component
 
 See the Makefile for details of the relevant ports.
 
@@ -35,12 +36,12 @@ To do this, change the voice_chat/yak_agent/yak_agent.py package. Replace the de
                             rules= self.rules,
                             stream=self.stream,)
 ```
-
-Will replace local model inference with gpt-3.5-turbo. (You'll need to set the OPENAI_API_KEY environment key in the .env file)
+If replacing local model inference with gpt-3.5-turbo. (You'll need to set the OPENAI_API_KEY environment key in the .env file)
 
 ### Environment variables
 
 The following environment variables need to be set in the .env file in the voice_chat folder.
+
 
 OPENAI_API_KEY (if using OpenAi models)
 HUGGING_FACE_API_TOKEN  (if using HF models hosted by them)
@@ -48,14 +49,21 @@ assembly_ai_api (used for speech to text)
 AZURE_SPEECH_SERVICES_KEY (text to speech)
 AZURE_SPEECH_REGION  (text to speech)
 
-
-A second env file at the root level (same level as the docker-compose.yml file if your using docker-compose).
+APPLICATION_ROOT_FOLDER (root folder where the application is running)
 
 IMAGES_FOLDER = (folder where menu images will be stored)
 MONGODB_ROOT_FOLDER  (mongodb database files root)
-MODEL_FILE_FOLDER = (if using locally served models, this shoudl point to them)
-MONGO_INITDB_ROOT_USERNAME 
+MODEL_FILE_FOLDER = (if using locally served models, this shoudl point to them e.g 'models' )
+MONGO_INITDB_ROOT_USERNAME (mongodb credentials)
 MONGO_INITDB_ROOT_PASSWORD
+
+MODEL_DRIVER_CONFIG_PATH (relative path to model driver configuration) e.g. "voice_chat/configs/model_driver.yaml"
+
+OCR_PORT = 8885 (used by OCR container to avoid conflict with port used by fastAPI)
+
+SERVICE_AGENT_PROVIDER  (used for AI-powered text editing e.g 'OPENAI')
+SERVICE_AGENT_MODEL (name of model to use for AI-powered text editing e.g. 'gpt-3.5-turbo')
+
 
 Note: assembly.ai (STT) if required here as a temporary token for use on the front end needs to be generated.
 
@@ -64,7 +72,7 @@ Yakwith.ai backend uses TIG ( to serve models), tesseract server ( OCR) and mong
 See docker-compose.yml for details and to update for your local file structure. 
 ```
 docker-compose pull
-docker-compose up
+docker-compose up -d
 ```
 
 TGI listens on port 8080
