@@ -97,17 +97,25 @@ class Cafe:
     """Cafe data class for data modelling pymongo"""
 
     business_uid: str = ""
-    default_avatar: str = ""
-    house_rules: List[str] = field(default_factory=list)
-    menus: List[Menu] = field(default_factory=list)
+    default_avatar: Optional[str] = ""
+    avatar_settings: Optional[Dict] = field(
+        default_factory=dict
+    )  # Make this a dict for future expansion
+    house_rules: Optional[str] = ""
+    menus: Optional[List[Menu]] = field(default_factory=list)
+    notes: Optional[str] = ""
+    model: str = "none"
 
     def to_dict(self):
         # Convert Cafe instance to dictionary
         return {
             "business_uid": self.business_uid,
             "default_avatar": self.default_avatar,
+            "avatar_settings": self.avatar_settings,
             "house_rules": self.house_rules,
             "menus": [menu.to_dict() for menu in self.menus],
+            "notes": self.notes,
+            "model": self.model,
         }
 
     @classmethod
@@ -117,13 +125,9 @@ class Cafe:
         return cls(
             business_uid=data["business_uid"],
             default_avatar=data.get("default_avatar", "default"),
-            house_rules=data.get("house_rules", []),
+            avatar_settings=data.get("avatar_settings", {}),
+            house_rules=data.get("house_rules", ""),
             menus=[Menu.from_dict(menu_data) for menu_data in data.get("menus", [])],
+            notes=data.get("notes", ""),
+            model=data.get("model"),
         )
-
-
-@dataclass
-class std_response:
-    status: str = ""
-    msg: str = ""
-    payload: Any = None

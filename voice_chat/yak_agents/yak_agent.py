@@ -28,12 +28,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
-RULES_ROOT_PATH = "voice_chat/cafe_data"
-RULES_AGENT_FOLDER = "agent"
-RULE_RESTAURANT_FOLDER = "restaurant"
-RULES_PARENT_FOLDER = "rules"
-
-
 class YakStatus(Enum):
     INITIALIZING = 0
     IDLE = 1
@@ -54,7 +48,7 @@ class YakAgent:
         model_driver_config: ModelDriverConfiguration object for prompt driver.
         model_driver_config_name: filename of the yaml configuration file for prompt driver. If model_driver_config is specified, this is ignored.
 
-        rules : str: Concatenated list of all text to be permanently saved to the LLM context (survives LLM context pruning in Griptape)
+        rules : List[str]: List of natural language prompts to be permanently saved to the LLM context (survives LLM context pruning in Griptape)
 
         user_id: a uid for the user if provided. Reserved for personalisation feature in the future.
         task: the function name of the InferenceClient task that will be served.
@@ -63,22 +57,17 @@ class YakAgent:
         :: Attributes not initialized ::
         streaming_event_listeners: List[EventListener], optional: List of event listeners for the griptape.agent. Mostly useful for debugging.
         output_fn: Callable, optional: output of streaming responses.
-        agent: Agent
+
+        agent: Agent : The griptape.agent
 
     """
-
-    def check_keys(self, attribute, value):
-        if value is not None:
-            for key, _ in value.items():
-                if key not in [RULES_AGENT_FOLDER, RULE_RESTAURANT_FOLDER]:
-                    raise ValueError(
-                        f"Only {RULES_AGENT_FOLDER},{RULE_RESTAURANT_FOLDER} are permitted keys for rules config file locations."
-                    )
 
     business_uid: str = field(default="default", kw_only=True)
     model_driver_config_name: Optional[str] = field(default="default_model_driver")
     model_driver_config: Optional[ModelDriverConfiguration] = field(default=None)
-    rule_names: Optional[Dict] = field(default=Factory(dict))  #TODO remove. deprecated after adding mongo backend
+    rule_names: Optional[Dict] = field(
+        default=Factory(dict)
+    )  # TODO remove. deprecated after adding mongo backend
     rules: Optional[list[str]] = field(default=Factory(list))
     user_id: Optional[str] = field(default=None)
 
@@ -99,12 +88,13 @@ class YakAgent:
                 if ".yaml" not in self.model_driver_config_name:
                     self.model_driver_config_name += ".yaml"
                 config_filename = os.path.join(
-                    f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}", self.model_driver_config_name
+                    f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}",
+                    self.model_driver_config_name,
                 )
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
                     OmegaConf.load(config_filename)
                 )
-               
+
         except Exception as e:
             raise RuntimeError(f"Error loading agent related config file: {e}")
 
@@ -163,13 +153,13 @@ class YakAgent:
 
 
 if __name__ == "__main__":
-    """     yak = YakAgent(
-            cafe_id="Twist",
-            model_driver_config_name="zephyr_7B_model_driver",
-            rule_names={"restaurant": "json_menu", "agent": "average_agent"},
-            stream=True,
-        )
-        from griptape.utils import Chat
+    """yak = YakAgent(
+        cafe_id="Twist",
+        model_driver_config_name="zephyr_7B_model_driver",
+        rule_names={"restaurant": "json_menu", "agent": "average_agent"},
+        stream=True,
+    )
+    from griptape.utils import Chat
 
-        Chat(yak.agent).start() """
+    Chat(yak.agent).start()"""
     pass

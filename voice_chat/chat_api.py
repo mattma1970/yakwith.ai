@@ -37,12 +37,14 @@ from voice_chat.data_classes.chat_data_classes import (
     SessionStart,
     SttTokenRequest,
     ServiceAgentRequest,
+    StdResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
     MenuHelper,
     DatabaseConfig,
     ServicesHelper,
+    DataHelper,
 )
 
 from bson import ObjectId
@@ -131,18 +133,20 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
 
     return {"temp_token": temp_token}
 
+
 @app.get("/agent/reservation/")
 def agent_reservation():
     """
-        Create a placeholder in the agent registry and return a session_id. 
-        The agent will be created when the conversatino starts.
+    Create a placeholder in the agent registry and return a session_id.
+    The agent will be created when the conversatino starts.
     """
     session_id: str = str(uuid4())
-    logger.info(f'Session ID {session_id} reserved')   # TODO add time limit for session_id to expire.
+    logger.info(
+        f"Session ID {session_id} reserved"
+    )  # TODO add time limit for session_id to expire.
     agent_registry[session_id] = None
-    return {
-        'session_id': session_id
-    }
+    return {"session_id": session_id}
+
 
 @app.post("/agent/create/")
 def agent_create(config: SessionStart) -> Dict:
@@ -151,7 +155,7 @@ def agent_create(config: SessionStart) -> Dict:
     Arguments:
         business_uid: unique id for the cafe.
         menu_id: unique ID of menu for the business.
-        agent_rules: contains house rules, menu rules, agent personality rules as concatenated 
+        agent_rules: contains house rules, menu rules, agent personality rules as concatenated
                     list of strings. Rules are preserved in LLM context even during conversation memory pruning.
         stream: boolean indicating if response from chat should be streamed back.
         user_id: a unique id for the user supplied by authentication tool.
@@ -159,37 +163,45 @@ def agent_create(config: SessionStart) -> Dict:
         session_id: str(uuid4): the session_id under which the agent is registered.
     """
     yak_agent = None
-    msg: str = ''
+    msg: str = ""
     ok: bool = False
 
     try:
         cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
-        menu: Menu = MenuHelper.get_one_menu(database, business_uid=config.business_uid, menu_id=config.menu_id)
+        menu: Menu = MenuHelper.get_one_menu(
+            database, business_uid=config.business_uid, menu_id=config.menu_id
+        )
         if menu is None:
-            return {'status':'error','msg':f'Menu {config.menu_id} not found','payload':''}
-        
+            return {
+                "status": "error",
+                "msg": f"Menu {config.menu_id} not found",
+                "payload": "",
+            }
+
         logger.info(f"Creating agent for: {config.business_uid} in {config.session_id}")
-        
+
         if config.user_id is not None:
             raise NotImplementedError("User based customisation not yet implemented.")
         else:
-            rule_set: List[str] = [_MENU_RULE_PREFIX+'\n'+menu.menu_text]
-            rule_set.extend(menu.rules.split('\n'))
+            rule_set: List[str] = [_MENU_RULE_PREFIX + "\n" + menu.menu_text]
+            rule_set.extend(menu.rules.split("\n"))
             rule_set.extend(cafe.house_rules)
-            rule_set.extend(config.avatar_personality.split('\n'))
-            rule_set = list(filter(lambda x: len(x.strip())>0, rule_set))
- 
+            rule_set.extend(config.avatar_personality.split("\n"))
+            rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
+
             yak_agent = YakAgent(
                 business_uid=config.business_uid, rules=rule_set, stream=config.stream
             )
 
         agent_registry[config.session_id] = yak_agent
-        logger.info(f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}")
+        logger.info(
+            f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}"
+        )
         ok = True
     except Exception as e:
-        msg = f'A problem occured while creating a yak_agent: {e}'
+        msg = f"A problem occured while creating a yak_agent: {e}"
         logger.error(msg)
-    return {"status":"success" if ok else "error", "msg":msg, "payload":""}
+    return {"status": "success" if ok else "error", "msg": msg, "payload": ""}
 
 
 @app.post("/chat_with_agent")
@@ -528,7 +540,7 @@ def menus_get_as_options(business_uid: str, encoded_utc_time: str):
             if "start" in menu.valid_time_range and "end" in menu.valid_time_range:
                 # Check if time of day falls within the valid time range.
                 if (
-                    menu.valid_time_range["start"].date() 
+                    menu.valid_time_range["start"].date()
                     != menu.valid_time_range["end"]
                 ):
                     # time range straddles 2 different days.
@@ -617,6 +629,51 @@ async def menu_ocr(business_uid: str, menu_id: str):
         logger.error(f"Error in performing OCR. Message {e}")
 
     return {"status": "success" if status == True else "error", "message": msg}
+
+
+"""
+Business entities
+"""
+
+
+@app.get("/cafe/settings/get/{business_uid}")
+def get_settings(business_uid: str):
+    cafe = MenuHelper.get_cafe(database, business_uid=business_uid)
+    if cafe is not None:
+        cafe.menus = []  # Not needed but must NOT be None
+        return StdResponse(True, "", cafe.to_dict()).to_dict()
+    else:
+        return StdResponse(False, "No cafe returned. Please check logs.", {}).to_dict()
+
+
+@app.post("/cafe/settings/save")
+def cafe_save_settings(settings: Cafe):
+    ok: bool = False
+    msg: str = ""
+    ret = None
+
+    ok, msg = MenuHelper.upsert_cafe_settings(database, settings.business_uid, settings)
+
+    return StdResponse(ok, msg).to_dict()
+
+
+@app.get("/data/options/{business_uid}/{table_name}/{columns}")
+def cafe_get_setting_options(business_uid: str, table_name: str, columns: str):
+    ok: bool = False
+    msg: str = ""
+    ret = None
+    return_fields: str = columns.split(",")
+
+    data: List[Dict] = DataHelper.get_non_business_data(
+        database, table_name=f"{table_name}", return_field_names=return_fields
+    )
+    if data is not None:
+        ok = True
+        data = list(data)
+    else:
+        msg = f"Failed to retrieve fields {return_fields} for {table_name}"
+
+    return StdResponse(ok, msg, data).to_dict()
 
 
 if __name__ == "__main__":

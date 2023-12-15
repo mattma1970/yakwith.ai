@@ -32,6 +32,38 @@ class DatabaseConfig:
         self.db = self.client[config.database.name]
         self.cafes = self.db[config.database.default_collection]
         self.services = self.db[config.database.services_collection]
+        self.data = self.db[config.database.data_collection]
+
+
+class DataHelper:
+    """
+    Miscellaneous operations n the data collection
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_non_business_data(
+        cls,
+        config: DatabaseConfig,
+        *,
+        table_name: str,
+        return_field_names: List[str],
+        # sort: bool = False,
+        # sort_field_name: str  # can't be a dictionary field name.
+    ):
+        """Get a list of str fields for given table."""
+        selector: Dict = {}
+        if config.data.find({"table_name": {"$exists": True}}):
+            for field_name in return_field_names:
+                config.data.find({f"{field_name}": {"$exists": True}})
+                selector[f"{field_name}"] = True
+            selector["_id"] = False  # drop it because its not seriaizable
+        else:
+            return None
+        results = config.data.find({"table_name": table_name}, selector)
+        return results
 
 
 class ServicesHelper:
@@ -156,6 +188,34 @@ class MenuHelper:
         except Exception as e:
             logger.error(f"No match business found: {e}")
         return cafe
+
+    @classmethod
+    def upsert_cafe_settings(
+        cls,
+        db: DatabaseConfig,
+        business_uid: str,
+        updated_partial_cafe: Cafe,
+        skip_fields: List[str] = ["menus"],
+    ):
+        """Update all fields except menus. Menus are not updated via settings UI."""
+        ok: str = False
+        msg: str = ""
+        try:
+            cafe: Cafe = cls.get_cafe(db, business_uid=business_uid)
+            if cafe is None:
+                cafe = updated_partial_cafe
+            else:
+                for key, value in updated_partial_cafe.__dict__.items():
+                    if skip_fields is None or not (key in skip_fields):
+                        setattr(cafe, key, value)
+            db.cafes.update_one(
+                {"business_uid": business_uid}, {"$set": cafe.to_dict()}, upsert=True
+            )
+            ok = True
+        except Exception as e:
+            msg = f"A problem occured when upserting cafe settings for business_uid {business_uid}: {e}"
+            logger.error(msg)
+        return ok, msg
 
     @classmethod
     def get_one_menu(cls, db: DatabaseConfig, business_uid: str, menu_id: str) -> Menu:

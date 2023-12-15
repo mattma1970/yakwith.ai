@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Union, List
+from typing import Optional, Dict, Union, List, Any
 from os import PathLike
 from pydantic import BaseModel
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ import datetime
 import pytz
 
 import re
+import json
 
 from griptape.rules import Rule
 from griptape.events import EventListener
@@ -36,11 +37,14 @@ class AppParameters(BaseModel):
 
 class SessionStart(BaseModel):
     """Message to create a new chat bot"""
+
     session_id: str
     business_uid: str
     menu_id: str
-    avatar_personality: Optional[str] # free text describing the avatars personality and behaviour.
-    stream: bool #whether responses should be streamed back.
+    avatar_personality: Optional[
+        str
+    ]  # free text describing the avatars personality and behaviour.
+    stream: bool  # whether responses should be streamed back.
     user_id: Optional[str] = None
 
 
@@ -199,3 +203,27 @@ class MenuList:
                 setattr(new_menu_list, key, _value)
         new_menu_list.__attrs_post_init__()
         return new_menu_list
+
+
+@dataclass
+class StdResponse:
+    ok: bool = False
+    msg: str = ""
+    payload: Any = None
+
+    def to_dict(
+        self,
+    ) -> Dict:
+        return {
+            "status": "success" if self.ok else "error",
+            "msg": self.msg,
+            "payload": self.payload,
+        }
+
+    def to_string(self) -> str:
+        res = {
+            "status": "success" if self.ok else "error",
+            "msg": self.msg,
+            "payload": self.payload,
+        }
+        return json.dumps(res)
