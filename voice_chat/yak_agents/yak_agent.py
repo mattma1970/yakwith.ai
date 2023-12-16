@@ -82,6 +82,7 @@ class YakAgent:
         default=YakStatus.IDLE
     )  # Access via status property
 
+    voice_id: str = field() # Agent voice id from STT provider.
     def __attrs_post_init__(self):
         try:
             if self.model_driver_config is None:

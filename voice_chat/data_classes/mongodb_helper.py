@@ -12,6 +12,7 @@ from dataclasses import field  # pydantic.dataclasses doesn't ahve a field metho
 from omegaconf import OmegaConf
 import base64
 from itertools import chain
+import json
 
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 
@@ -68,7 +69,8 @@ class DataHelper:
 
 class ServicesHelper:
     """
-    Miscellaneous CRUD functions used by the Services endpoints.
+     Miscellaneous CRUD functions used by the Services endpoints. 
+     For non-business specifc models e.g. for text editing
     """
 
     def __init__(self):
@@ -216,6 +218,34 @@ class MenuHelper:
             msg = f"A problem occured when upserting cafe settings for business_uid {business_uid}: {e}"
             logger.error(msg)
         return ok, msg
+
+    @classmethod
+    def parse_dict(
+            cls, 
+            target: Union[Dict,str],
+            key: str = None)->Union[Dict,str]:
+        """ 
+            Retrieve either the dictionary of the value of the passed in key from the class attribute.
+
+            @args:
+                target: dictionary or a stringified dictionary.
+        """
+        ret: Any = None
+        _target: Dict = None
+
+        if isinstance(target,dict):
+            if key in target:
+                ret = str(target[key])
+            if isinstance(target, str):
+                try:
+                    _target = json.loads(target)
+                    if key is None:
+                        ret = _target
+                    else:
+                        ret = _target[key]
+                except Exception as e:
+                    logger.error(f'Error parsing dictionary (dict_parse). {e}')
+        return ret
 
     @classmethod
     def get_one_menu(cls, db: DatabaseConfig, business_uid: str, menu_id: str) -> Menu:

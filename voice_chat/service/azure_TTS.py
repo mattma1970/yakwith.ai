@@ -25,7 +25,7 @@ logger = logging.getLogger("YakChatAPI")
 
 @define
 class AzureTextToSpeech:
-    voice_id: str = field(default="en-US-JasonNeural", kw_only=False)
+    voice_id: str = field(default="en-AU-KimNeural", kw_only=False)  # Ensure this is a valid voice id from you TTS provider
     audio_config: speechsdk.audio.AudioOutputConfig = field(
         default=speechsdk.audio.AudioOutputConfig(use_default_speaker=True),
         kw_only=True,
@@ -45,11 +45,11 @@ class AzureTextToSpeech:
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
         )  # audio/mpeg
-        speech_config.speech_synthesis_voice_name = "en-AU-KimNeural"
+        speech_config.speech_synthesis_voice_name = self.voice_id
 
         speech_config.set_property(
             speechsdk.PropertyId.Speech_LogFilename,
-            "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs/TTS/log.log",
+            f"{os.environ['APPLICATION_ROOT_FOLDER']}/voice_chat/logs/TTS/log.log",
         )
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(

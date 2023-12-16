@@ -185,12 +185,19 @@ def agent_create(config: SessionStart) -> Dict:
         else:
             rule_set: List[str] = [_MENU_RULE_PREFIX + "\n" + menu.menu_text]
             rule_set.extend(menu.rules.split("\n"))
-            rule_set.extend(cafe.house_rules)
+            rule_set.extend(cafe.house_rules.split("\n"))
             rule_set.extend(config.avatar_personality.split("\n"))
             rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
 
+        # Get the agent/avatar voice_id or fall back to system default.
+            _voice = MenuHelper.parse_dict(cafe.avatar_settings, 'voice')
+            voice_id: str = _voice if _voice else app_config.text_to_speech.default_voice_id
+
             yak_agent = YakAgent(
-                business_uid=config.business_uid, rules=rule_set, stream=config.stream
+                business_uid=config.business_uid,
+                rules=rule_set, 
+                stream=config.stream,
+                voice_id=voice_id
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -296,8 +303,8 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-
-    TTS: AzureTextToSpeech = AzureTextToSpeech(audio_config=None)
+  
+    TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id,audio_config=None)
     message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)
 
@@ -406,7 +413,7 @@ async def upload_menu(
         )
 
     file_id = str(uuid.uuid4())
-    file_path = f"{config.assets.image_folder}/{file_id}{file_extension}"
+    file_path = f"{app_config.assets.image_folder}/{file_id}{file_extension}"
 
     # create thumbnail to avoid sending large files back to client
     content = await file.read()
@@ -416,11 +423,11 @@ async def upload_menu(
     image_stream.seek(0)
     AR = raw_image.width / raw_image.height
     lower_res_size = (
-        math.floor(config.assets.thumbnail_image_width * AR),
-        config.assets.thumbnail_image_width,
+        math.floor(app_config.assets.thumbnail_image_width * AR),
+        app_config.assets.thumbnail_image_width,
     )
     lowres_image = raw_image.resize(lower_res_size, Image.LANCZOS)
-    lowres_file_path = f"{config.assets.image_folder}/{file_id}_lowres{file_extension}"
+    lowres_file_path = f"{app_config.assets.image_folder}/{file_id}_lowres{file_extension}"
     lowres_image.save(lowres_file_path)
 
     # Create a Menu object with menu_id set to the file_id
@@ -503,7 +510,7 @@ async def menus_get_all(business_uid: str, for_display: bool = True):
     else:
         # Insert thumbnail image data into the menu records before sending to client.
         loaded_menus = MenuHelper.insert_images(
-            config, menus=menus, image_types=[ImageSelector.THUMBNAIL]
+            app_config, menus=menus, image_types=[ImageSelector.THUMBNAIL]
         )
         if loaded_menus is None:
             return {"status": "Warning", "message": "No thumbnail menus returned."}
@@ -587,7 +594,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
 
     ret = None
     status: bool = False
-    url: str = config.ocr.url
+    url: str = app_config.ocr.url
     data = {
         "options": json.dumps(
             {
@@ -600,7 +607,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
     menu: Menu = MenuHelper.get_one_menu(
         database, business_uid=business_uid, menu_id=menu_id
     )
-    file_path = f"{config.assets.image_folder}/{menu_id}.png"
+    file_path = f"{app_config.assets.image_folder}/{menu_id}.png"
 
     try:
         # Tesseract requires the file object to be passed in not the URL.
@@ -686,15 +693,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    config = OmegaConf.load(args.config_path)
+    app_config = OmegaConf.load(args.config_path)
 
     # Instantiate Mongo class that provides API for pymongo interaction with mongodb.
-    database = DatabaseConfig(config)
+    database = DatabaseConfig(app_config)
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
 
-    log_file_path = os.path.join(config.logging.root_folder, "session_logs.log")
+    log_file_path = os.path.join(app_config.logging.root_folder, "session_logs.log")
     file_handler = RotatingFileHandler(
         log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
     )
@@ -708,4 +715,4 @@ if __name__ == "__main__":
 
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=config.api.port)
+    uvicorn.run(app, host="0.0.0.0", port=app_config.api.port)

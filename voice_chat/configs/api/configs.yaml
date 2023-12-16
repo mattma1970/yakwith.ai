@@ -20,3 +20,6 @@ logging:
 
 ocr:
   url: http://localhost:8885/tesseract # Must ensure this matches the port specified in the environment variables used by docker-compose.
+
+text_to_speech:
+  default_voice_id: en-AU-KimNeural   # for Azure TextToSpeech
