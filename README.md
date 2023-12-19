@@ -5,7 +5,7 @@ A fastAPI backend for locally hosted voicebots. Its designed to work with the (r
 As at 14/12/23 it is configured to use:
 * Azure Congnitive Services for Text-to-Speech;
 * a custom version of (griptape.ai)[http://griptape.ai] modified to support locally hosted huggingface models (see below)
-* models served locally using Huggingfacen's TGI LLM inference server running in docker. 
+* models served locally using Huggingface's TGI LLM inference server running in docker. 
 * OpenAI used for AI-powered text editiing in the textEditor frontend component
 
 See the Makefile for details of the relevant ports.

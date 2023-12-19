@@ -9,8 +9,8 @@
 
 import os
 import azure.cognitiveservices.speech as speechsdk
-from attrs import define, field
-from typing import List, Any, Dict, Generator, Iterable
+from attrs import define, field, Factory
+from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
 
@@ -139,3 +139,57 @@ class AzureTextToSpeech:
             text
         ).get()  # non-blocking but doesn't fullfill promise until all speeech audio is generated.
         return result
+
+@define
+class AzureTTSViseme(AzureTextToSpeech):
+    """
+        Extends the streaming speech synthesizer to also include viseme data
+    """
+    viseme_log : List[Dict] = field(factory=list)
+    index : int = 0
+    viseme_callback: Callable = field(init=False)
+
+
+    def __attrs_post_init__(self):
+        super().__attrs_post_init__()
+        self.viseme_callback = self.viseme_cb()
+
+        self.speech_synthesizer.viseme_received.connect(self.viseme_callback)  # Subscribe the speech synthesizer to the viseme events
+    
+  
+    def viseme_cb(self) -> Callable:
+        def _viseme_logger(evt):
+            ''' Call back to capture viseme event details '''
+            start: float = evt.audio_offset/10000000          
+            msg:Dict = {'start':start, 'end':10000.0, 'value':evt.viseme_id}
+            if self.index>0:
+                self.viseme_log[-1]['end'] = start   # Update the end time marker as the start of the current time. 
+            self.viseme_log.append(msg)
+            #logger.debug(f'index: {self.index},{msg}')
+            self.index+=1
+            # `Animation` is an xml string for SVG or a json string for blend shapes
+            #animation = evt.animation 
+            return None
+
+        return _viseme_logger
+    
+    def audio_viseme_generator(self, text):
+        ''' Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events. '''
+        audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(text)
+        _log = self.viseme_log.copy()
+        self.reset_viseme_log(len(_log))
+        return audio_output, _log
+
+    
+    def reset_viseme_log(self, start_index: int)-> None:
+        """ 
+            Its possible that move events have occured since the audio stream yeilded chunks fo the viseme_log
+            should be truncated to remove the old visemes. 
+        """
+        if start_index>0:
+            self.index -= start_index
+            self.viseme_log = self.viseme_log[:self.index]
+            logger.debug(f'reset viseme log : {self.index}')
+        else:
+            self.viseme_log = []
+  

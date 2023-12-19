@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Response, File, UploadFile, HTTPException, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 import requests
@@ -50,7 +50,7 @@ from voice_chat.data_classes.mongodb_helper import (
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy
-from voice_chat.service.azure_TTS import AzureTextToSpeech
+from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -335,6 +335,42 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     logger.debug(f"Last resposne for {session_id}, {last_response} ")
     return {"last": last_response}
 
+
+@app.post("/agent/talk_with_avatar")
+async def talk_with_avatar(message: ApiUserMessage):
+    """
+        Get text to speech and the viseme data for lipsync
+    """
+    logger.info(f"Request spoken conversation for session_id: {message.session_id}")
+    logger.debug(f"User input: {message.user_input}")
+
+    session_id: str = message.session_id
+    if session_id not in agent_registry:
+        logger.error(
+            f"Error: Request for agent bound to session_id: {message.session_id} but none exists."
+        )
+        raise RuntimeError(
+            "No agent found. An agent must be created prior to starting chat."
+        )
+
+    yak: YakAgent = agent_registry[session_id]
+  
+    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id,audio_config=None)
+
+    response = Stream(yak.agent).run(message.user_input)
+
+    def stream_generator(response) -> Tuple[Any, str]:
+        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
+            stream, visemes = TTS.audio_viseme_generator(phrase)
+            audio_data_base64 = base64.b64encode(stream.audio_data).decode('utf-8')
+            data = {
+                "audio_data": audio_data_base64,
+                "viseme_info": visemes
+            }
+            json_data = json.dumps(data)
+            yield json_data  # Byte data for whole sentance and the phrase
+
+    return StreamingResponse(stream_generator(response), media_type="application/json")
 
 """
 Misc
