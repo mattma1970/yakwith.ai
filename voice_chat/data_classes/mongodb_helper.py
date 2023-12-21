@@ -69,8 +69,8 @@ class DataHelper:
 
 class ServicesHelper:
     """
-     Miscellaneous CRUD functions used by the Services endpoints. 
-     For non-business specifc models e.g. for text editing
+    Miscellaneous CRUD functions used by the Services endpoints.
+    For non-business specifc models e.g. for text editing
     """
 
     def __init__(self):
@@ -220,20 +220,17 @@ class MenuHelper:
         return ok, msg
 
     @classmethod
-    def parse_dict(
-            cls, 
-            target: Union[Dict,str],
-            key: str = None)->Union[Dict,str]:
-        """ 
-            Retrieve either the dictionary of the value of the passed in key from the class attribute.
+    def parse_dict(cls, target: Union[Dict, str], key: str = None) -> Union[Dict, str]:
+        """
+        Retrieve either the dictionary of the value of the passed in key from the class attribute.
 
-            @args:
-                target: dictionary or a stringified dictionary.
+        @args:
+            target: dictionary or a stringified dictionary.
         """
         ret: Any = None
         _target: Dict = None
 
-        if isinstance(target,dict):
+        if isinstance(target, dict):
             if key in target:
                 ret = str(target[key])
             if isinstance(target, str):
@@ -244,7 +241,7 @@ class MenuHelper:
                     else:
                         ret = _target[key]
                 except Exception as e:
-                    logger.error(f'Error parsing dictionary (dict_parse). {e}')
+                    logger.error(f"Error parsing dictionary (dict_parse). {e}")
         return ret
 
     @classmethod

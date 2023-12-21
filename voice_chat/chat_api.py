@@ -38,6 +38,7 @@ from voice_chat.data_classes.chat_data_classes import (
     SttTokenRequest,
     ServiceAgentRequest,
     StdResponse,
+    MultiPartResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
@@ -189,15 +190,17 @@ def agent_create(config: SessionStart) -> Dict:
             rule_set.extend(config.avatar_personality.split("\n"))
             rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
 
-        # Get the agent/avatar voice_id or fall back to system default.
-            _voice = MenuHelper.parse_dict(cafe.avatar_settings, 'voice')
-            voice_id: str = _voice if _voice else app_config.text_to_speech.default_voice_id
+            # Get the agent/avatar voice_id or fall back to system default.
+            _voice = MenuHelper.parse_dict(cafe.avatar_settings, "voice")
+            voice_id: str = (
+                _voice if _voice else app_config.text_to_speech.default_voice_id
+            )
 
             yak_agent = YakAgent(
                 business_uid=config.business_uid,
-                rules=rule_set, 
+                rules=rule_set,
                 stream=config.stream,
-                voice_id=voice_id
+                voice_id=voice_id,
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -303,17 +306,20 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-  
-    TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id,audio_config=None)
+
+    TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id, audio_config=None)
     message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
         for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
             stream = TTS.audio_stream_generator(phrase)
-            yield stream.audio_data  # Byte data for whole sentance and the phrase
+            yield MultiPartResponse(phrase, stream.audio_data)
 
-    return StreamingResponse(stream_generator(response), media_type="audio/mpeg")
+    return StreamingResponse(
+        stream_generator(response),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 @app.get("/get_last_response/{session_id}")
@@ -339,7 +345,7 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 @app.post("/agent/talk_with_avatar")
 async def talk_with_avatar(message: ApiUserMessage):
     """
-        Get text to speech and the viseme data for lipsync
+    Get text to speech and the viseme data for lipsync
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
     logger.debug(f"User input: {message.user_input}")
@@ -354,23 +360,21 @@ async def talk_with_avatar(message: ApiUserMessage):
         )
 
     yak: YakAgent = agent_registry[session_id]
-  
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id,audio_config=None)
+
+    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
 
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
         for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
             stream, visemes = TTS.audio_viseme_generator(phrase)
-            audio_data_base64 = base64.b64encode(stream.audio_data).decode('utf-8')
-            data = {
-                "audio_data": audio_data_base64,
-                "viseme_info": visemes
-            }
-            json_data = json.dumps(data)
-            yield json_data  # Byte data for whole sentance and the phrase
+            yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
 
-    return StreamingResponse(stream_generator(response), media_type="application/json")
+    return StreamingResponse(
+        stream_generator(response),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
 
 """
 Misc
@@ -463,7 +467,9 @@ async def upload_menu(
         app_config.assets.thumbnail_image_width,
     )
     lowres_image = raw_image.resize(lower_res_size, Image.LANCZOS)
-    lowres_file_path = f"{app_config.assets.image_folder}/{file_id}_lowres{file_extension}"
+    lowres_file_path = (
+        f"{app_config.assets.image_folder}/{file_id}_lowres{file_extension}"
+    )
     lowres_image.save(lowres_file_path)
 
     # Create a Menu object with menu_id set to the file_id

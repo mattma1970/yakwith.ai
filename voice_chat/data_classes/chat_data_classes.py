@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from dataclasses import dataclass
 from attrs import define, field, Factory, validators
 from uuid import uuid4
+import base64
 
 import datetime
 import pytz
@@ -205,6 +206,13 @@ class MenuList:
         return new_menu_list
 
 
+"""
+
+Convenience classes for return types for fastAPi endpoints.
+
+"""
+
+
 @dataclass
 class StdResponse:
     ok: bool = False
@@ -227,3 +235,18 @@ class StdResponse:
             "payload": self.payload,
         }
         return json.dumps(res)
+
+
+@dataclass
+class MultiPartResponse:
+    """Use for sending metadata and audio"""
+
+    json_data: str
+    audio_bytes: bytes
+    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+
+    def prepare(self) -> str:
+        """
+        return string with boundary markers and data.
+        """
+        return f"--{self.boundary}\r\nContent-Type: application/json\r\n\r\n{self.json_data}\r\n{self.boundary}--frame\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}"
