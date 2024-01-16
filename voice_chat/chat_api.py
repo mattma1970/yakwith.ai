@@ -279,46 +279,11 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     def stream_generator(prompt):
         stream = TTS.audio_stream_generator(prompt)
-        yield stream.audio_data  # Byte data
+        yield MultiPartResponse(json.dumps(prompt),stream.audio_data).prepare()
 
     logger.debug(f"Sending streaming response, session_id {session_id}")
     return StreamingResponse(
-        stream_generator(message.user_input), media_type="audio/mpeg"
-    )
-
-
-@app.post("/talk_with_agent")
-def talk_with_agent(message: ApiUserMessage) -> Dict:
-    """
-    Get a synthesised voice for the stream LLM response and send that audio data back to the app.
-    Forces streaming response regardless of Agent sessions.
-    """
-    logger.info(f"Request spoken conversation for session_id: {message.session_id}")
-    logger.debug(f"User input: {message.user_input}")
-
-    session_id: str = message.session_id
-    if session_id not in agent_registry:
-        logger.error(
-            f"Error: Request for agent bound to session_id: {message.session_id} but none exists."
-        )
-        raise RuntimeError(
-            "No agent found. An agent must be created prior to starting chat."
-        )
-
-    yak: YakAgent = agent_registry[session_id]
-
-    TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id, audio_config=None)
-    message_accumulator = []
-    response = Stream(yak.agent).run(message.user_input)
-
-    def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
-            stream = TTS.audio_stream_generator(phrase)
-            yield MultiPartResponse(phrase, stream.audio_data)
-
-    return StreamingResponse(
-        stream_generator(response),
-        media_type="multipart/x-mixed-replace; boundary=frame",
+        stream_generator(message.user_input), media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
 
@@ -342,10 +307,52 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     return {"last": last_response}
 
 
+@app.post("/talk_with_agent")
+def talk_with_agent(message: ApiUserMessage) -> Dict:
+    """
+    Get a synthesised voice for the stream LLM response and send that audio data back to the app.
+    Does not generate Visemes for lipsync. See /talk_with_avatar for visemes.
+    Forces streaming response regardless of Agent settings.
+    """
+    logger.info(f"Request spoken conversation for session_id: {message.session_id}")
+    logger.debug(f"User input: {message.user_input}")
+
+    session_id: str = message.session_id
+    if session_id not in agent_registry:
+        logger.error(
+            f"Error: Request for agent bound to session_id: {message.session_id} but none exists."
+        )
+        raise RuntimeError(
+            "No agent found. An agent must be created prior to starting chat."
+        )
+
+    yak: YakAgent = agent_registry[session_id]
+
+    TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id, audio_config=None)
+    message_accumulator = []
+    response = Stream(yak.agent).run(message.user_input)
+    yak.agent_status = YakStatus.TALKING
+
+    def stream_generator(response) -> Tuple[Any, str]:
+        for phrase in TTS.text_preprocessor(response, filter=None):
+            stream = TTS.audio_stream_generator(phrase)
+            yield MultiPartResponse(json.dumps(phrase), stream.audio_data).prepare()
+            if yak.status != YakStatus.TALKING:
+            # status can be changed by a call from client to the /interrupt_talking endpoint.
+                break
+        yak.status = YakStatus.IDLE
+
+    return StreamingResponse(
+        stream_generator(response),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
 @app.post("/agent/talk_with_avatar")
 async def talk_with_avatar(message: ApiUserMessage):
     """
-    Get text to speech and the viseme data for lipsync
+    Get text to speech and the viseme data for lipsync.
+    Can be interrupted.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
     logger.debug(f"User input: {message.user_input}")
@@ -366,15 +373,30 @@ async def talk_with_avatar(message: ApiUserMessage):
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter="[^a-zA-Z0-9,. $']"):
+        for phrase in TTS.text_preprocessor(response, filter=None):
             stream, visemes = TTS.audio_viseme_generator(phrase)
             yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
+            if yak.status != YakStatus.TALKING:
+                # status can be changed by a call from client to the /interrupt_talking endpoint.
+                logger.debug(f'Exit stream due to status changed externally.')
+                break
+        yak.status = YakStatus.IDLE
+    
+    yak.agent_status = YakStatus.TALKING
 
     return StreamingResponse(
         stream_generator(response),
-        media_type="multipart/x-mixed-replace; boundary=frame",
+        media_type="multipart/x-mixed-replace; boundary=frame", 
     )
 
+@app.get('/agent/interrupt/{session_id}')
+def agent_interrupt(session_id: str):
+    """ Change the agent_status. If set to IDLE, this will interrupt the speech generation in the talk_with_{agent|avatar} endpoints. """
+    logger.info(f'Speech interupted: session_id {session_id}')
+    yak: YakAgent = agent_registry[session_id]
+    if yak:
+        yak.agent_status = YakStatus.IDLE
+    return StdResponse(True, 'OK','Interrupted')
 
 """
 Misc

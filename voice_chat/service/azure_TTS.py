@@ -86,17 +86,15 @@ class AzureTextToSpeech:
                     sentance_ends_flags.reverse()
                     # split on the last end of sentance marker
                     split = len(sentance_ends_flags) - sentance_ends_flags.index(True)
-                    text_for_synth += text_chunk[:split].strip()
+                    text_for_synth += text_chunk[:split]
                     if (
-                        text_for_synth != ""
+                        text_for_synth.strip() != ""
                     ):  # if sentence only have \n or space, we could skip
                         if filter is not None:
                             text_for_synth = remove_problem_chars(
                                 text_for_synth, filter
                             )
-                        logger.debug(
-                            f"Partial response text for synthesis: {text_for_synth}"
-                        )
+                        logger.debug(f'Text for synth: {text_for_synth}')
                         yield text_for_synth
                         text_for_synth = text_chunk[split:]
                 else:
@@ -105,6 +103,7 @@ class AzureTextToSpeech:
                 text_for_synth += text_chunk
 
         if text_for_synth != "":
+            logger.debug(f'Text flushed for synth (not filtered):{text_for_synth}')
             if filter is not None:
                 return remove_problem_chars(text_for_synth, filter)
             else:

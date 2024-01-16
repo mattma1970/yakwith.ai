@@ -6,7 +6,7 @@ HOME := /home/mtman/Documents/Repos/yakwith.ai
 run_tgi:
 	echo 'Starting Dockerized TGI on port 8080 for Mistal-7B-OpenOrca for locally hosted'
 	cd /home/mtman/Documents/Repos/yakwith.ai/voice_chat
-	. .venv/bin/activate
+	. ../.venv/bin/activate
 	docker run --rm --gpus all -p 8080:80 -v  $(HOME)models:/data \
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id /data/Mistral-7B-OpenOrca \
@@ -15,7 +15,7 @@ run_tgi:
 run_tgi_zephyr:
 	echo 'Run TGI with local copy of zephyr 7B'
 	cd /home/mtman/Documents/Repos/yakwith.ai/voice_chat
-	. .venv/bin/activate
+	. ../.venv/bin/activate
 	docker run --rm --gpus all -p 8080:80 -v  $(HOME)/models:/data \
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id /data/zephyr \
