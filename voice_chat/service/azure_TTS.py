@@ -94,7 +94,7 @@ class AzureTextToSpeech:
                             text_for_synth = remove_problem_chars(
                                 text_for_synth, filter
                             )
-                        logger.debug(f'Text for synth: {text_for_synth}')
+                        logger.debug(f"Text for synth: {text_for_synth}")
                         yield text_for_synth
                         text_for_synth = text_chunk[split:]
                 else:
@@ -103,7 +103,7 @@ class AzureTextToSpeech:
                 text_for_synth += text_chunk
 
         if text_for_synth != "":
-            logger.debug(f'Text flushed for synth (not filtered):{text_for_synth}')
+            logger.debug(f"Text flushed for synth (not filtered):{text_for_synth}")
             if filter is not None:
                 return remove_problem_chars(text_for_synth, filter)
             else:

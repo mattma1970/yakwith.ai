@@ -29,12 +29,12 @@ load_dotenv()
 
 
 class YakStatus(Enum):
-    """ Status values of the agent that can be used as a session state. """
+    """Status values of the agent that can be used as a session state."""
+
     INITIALIZING = 0
     IDLE = 1
     GENERATING_TEXT = 2
     TALKING = 3
-
 
 
 @define(kw_only=True)

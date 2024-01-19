@@ -260,7 +260,10 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
 @app.post("/get_agent_to_say")
 def get_agent_to_say(message: ApiUserMessage) -> Dict:
     """
-    Utility function to that gets the agent to say a particular message
+    Utility function to that gets the agent to say a particular message.
+    The inner function 'stream_generator' takes a text string not a streaming response.
+    @return:
+        visemes and audio data.
     """
     logger.info(f"Request for /get_agent_to_say : {message.user_input}")
     # Retrieve the Agent (and agent memory) if session already underway
@@ -275,15 +278,16 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     yak: YakAgent = agent_registry[session_id]
 
-    TTS: AzureTextToSpeech = AzureTextToSpeech(audio_config=None)
+    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
 
     def stream_generator(prompt):
-        stream = TTS.audio_stream_generator(prompt)
-        yield MultiPartResponse(json.dumps(prompt),stream.audio_data).prepare()
+        stream, visemes = TTS.audio_viseme_generator(prompt)
+        yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
 
     logger.debug(f"Sending streaming response, session_id {session_id}")
     return StreamingResponse(
-        stream_generator(message.user_input), media_type="multipart/x-mixed-replace; boundary=frame",
+        stream_generator(message.user_input),
+        media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
 
@@ -330,7 +334,7 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
 
     TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id, audio_config=None)
     message_accumulator = []
-    response = Stream(yak.agent).run(message.user_input)
+    response = Stream(yak.agent).run(message.user_input)  # Streaming response.
     yak.agent_status = YakStatus.TALKING
 
     def stream_generator(response) -> Tuple[Any, str]:
@@ -338,7 +342,7 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
             stream = TTS.audio_stream_generator(phrase)
             yield MultiPartResponse(json.dumps(phrase), stream.audio_data).prepare()
             if yak.status != YakStatus.TALKING:
-            # status can be changed by a call from client to the /interrupt_talking endpoint.
+                # status can be changed by a call from client to the /interrupt_talking endpoint.
                 break
         yak.status = YakStatus.IDLE
 
@@ -378,25 +382,27 @@ async def talk_with_avatar(message: ApiUserMessage):
             yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
             if yak.status != YakStatus.TALKING:
                 # status can be changed by a call from client to the /interrupt_talking endpoint.
-                logger.debug(f'Exit stream due to status changed externally.')
+                logger.debug(f"Exit stream due to status changed externally.")
                 break
         yak.status = YakStatus.IDLE
-    
+
     yak.agent_status = YakStatus.TALKING
 
     return StreamingResponse(
         stream_generator(response),
-        media_type="multipart/x-mixed-replace; boundary=frame", 
+        media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
-@app.get('/agent/interrupt/{session_id}')
+
+@app.get("/agent/interrupt/{session_id}")
 def agent_interrupt(session_id: str):
-    """ Change the agent_status. If set to IDLE, this will interrupt the speech generation in the talk_with_{agent|avatar} endpoints. """
-    logger.info(f'Speech interupted: session_id {session_id}')
+    """Change the agent_status. If set to IDLE, this will interrupt the speech generation in the talk_with_{agent|avatar} endpoints."""
+    logger.info(f"Speech interupted: session_id {session_id}")
     yak: YakAgent = agent_registry[session_id]
     if yak:
         yak.agent_status = YakStatus.IDLE
-    return StdResponse(True, 'OK','Interrupted')
+    return StdResponse(True, "OK", "Interrupted")
+
 
 """
 Misc
