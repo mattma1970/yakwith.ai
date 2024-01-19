@@ -172,8 +172,6 @@ class AzureTTSViseme(AzureTextToSpeech):
             self.viseme_log.append(msg)
             # logger.debug(f'index: {self.index},{msg}')
             self.index += 1
-            # `Animation` is an xml string for SVG or a json string for blend shapes
-            # animation = evt.animation
             return None
 
         return _viseme_logger
