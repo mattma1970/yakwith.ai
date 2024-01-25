@@ -220,28 +220,45 @@ class MenuHelper:
         return ok, msg
 
     @classmethod
-    def parse_dict(cls, target: Union[Dict, str], key: str = None) -> Union[Dict, str]:
+    def parse_dict(cls, target: Union[Dict, str], keys: Union[str,List[str]] = None, drop_keys: bool = False ) -> Union[Dict, str]:
         """
-        Retrieve either the dictionary of the value of the passed in key from the class attribute.
-
+        Parse and Filter a dictionary or json string.
+        
+        args:
+            target: Union[dict|str] The dictionary which is either a dict object or a stringified version.
+            keys: Union[str],list]: Dictionary key or list of keys. 
+                                    If 'None' then return return the entire dictionary.
         @args:
-            target: dictionary or a stringified dictionary.
+            dictionary
         """
         ret: Any = None
         _target: Dict = None
 
-        if isinstance(target, dict):
-            if key in target:
-                ret = str(target[key])
-            if isinstance(target, str):
-                try:
-                    _target = json.loads(target)
-                    if key is None:
-                        ret = _target
-                    else:
-                        ret = _target[key]
-                except Exception as e:
-                    logger.error(f"Error parsing dictionary (dict_parse). {e}")
+        # Parse the target dictionary
+        if isinstance(target, str):
+            try:
+                _target = json.loads(target)
+            except Exception as e:
+                logger.error(f"Error parsing dictionary (dict_parse). {e}")
+        elif isinstance(target, Dict):
+            _target = target
+
+        # Deal with multiplicity of keys.
+        if keys is None:
+            ret = _target
+        else:
+            if not(isinstance(keys, list)) :
+                _keys = [keys]
+            if drop_keys:
+                ret = _target
+            else: 
+                ret = {}
+            for key in keys:
+                if key in _target:
+                    if drop_keys and key in ret:
+                        del ret[key]
+                    else:                       
+                        ret[key]=target[key]
         return ret
 
     @classmethod

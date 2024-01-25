@@ -85,6 +85,7 @@ class YakAgent:
     )  # Access via status property
 
     voice_id: str = field()  # Agent voice id from STT provider.
+    avatar_config: Dict = field(default=Factory(dict))  # Primarily for avatar animations.
 
     def __attrs_post_init__(self):
         try:

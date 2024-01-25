@@ -190,17 +190,21 @@ def agent_create(config: SessionStart) -> Dict:
             rule_set.extend(config.avatar_personality.split("\n"))
             rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
 
-            # Get the agent/avatar voice_id or fall back to system default.
-            _voice = MenuHelper.parse_dict(cafe.avatar_settings, "voice")
-            voice_id: str = (
-                _voice if _voice else app_config.text_to_speech.default_voice_id
-            )
-
+            # Get avatar configurations
+            avatar_config: Dict = MenuHelper.parse_dict(cafe.avatar_settings) 
+            if 'voice' in avatar_config:
+                voice_id = avatar_config['voice']
+                del avatar_config['voice']
+            else:
+                # Get the agent/avatar voice_id or fall back to system default.
+                voice_id = app_config.text_to_speech.default_voice_id
+   
             yak_agent = YakAgent(
                 business_uid=config.business_uid,
                 rules=rule_set,
                 stream=config.stream,
                 voice_id=voice_id,
+                avatar_config=avatar_config
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -213,6 +217,34 @@ def agent_create(config: SessionStart) -> Dict:
         logger.error(msg)
     return {"status": "success" if ok else "error", "msg": msg, "payload": ""}
 
+@app.get("/agent/get_avatar_config/{session_id}")
+def get_avatar_config(session_id: str)-> Union[Dict, None]:
+    """
+    Avatar config is used for all non-voice related.
+    """
+    logger.info(f"Get avatar config : sesssion_id {session_id}")
+    msg: str = ""
+    ok: bool = True
+    ret: Any = None
+
+    # Retrieve the Agent (and agent memory) if session already underway
+    session_id: str = session_id
+    if session_id not in agent_registry:
+        msg = f"Error: Request for agent bound to session_id: {session_id} but none exists."
+        ok = False
+        logger.error(
+            msg
+        )
+        raise RuntimeError(
+            "No agent found. An agent must be created prior to starting chat."
+        )
+    
+    if ok:
+        yak: YakAgent = agent_registry[session_id]
+        ret = yak.avatar_config
+        logger.debug(f'avatarConfig: {ret}')
+
+    return StdResponse(ok,msg, ret)
 
 @app.post("/chat_with_agent")
 def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:

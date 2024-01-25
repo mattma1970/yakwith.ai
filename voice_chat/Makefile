@@ -3,6 +3,11 @@
 MODE := quiet
 HOME := /home/mtman/Documents/Repos/yakwith.ai
 
+connect_mongo:
+	echo 'Connect to mongosh when mongo running in docker'
+	docker exec -it yakwithai_mongo mongosh -u yak -p withai
+
+
 run_tgi:
 	echo 'Starting Dockerized TGI on port 8080 for Mistal-7B-OpenOrca for locally hosted'
 	cd /home/mtman/Documents/Repos/yakwith.ai/voice_chat
