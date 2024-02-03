@@ -39,6 +39,7 @@ from voice_chat.data_classes.chat_data_classes import (
     ServiceAgentRequest,
     StdResponse,
     MultiPartResponse,
+    BlendShapesMultiPartResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
@@ -313,8 +314,8 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
     TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
 
     def stream_generator(prompt):
-        stream, visemes = TTS.audio_viseme_generator(prompt)
-        yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
+        stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+        yield BlendShapesMultiPartResponse(json.dumps(blendshapes), json.dumps(visemes), stream.audio_data).prepare()
 
     logger.debug(f"Sending streaming response, session_id {session_id}")
     return StreamingResponse(
@@ -410,8 +411,8 @@ async def talk_with_avatar(message: ApiUserMessage):
 
     def stream_generator(response) -> Tuple[Any, str]:
         for phrase in TTS.text_preprocessor(response, filter=None):
-            stream, visemes = TTS.audio_viseme_generator(phrase)
-            yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
+            stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
+            yield BlendShapesMultiPartResponse(json.dumps(blendshapes), json.dumps(visemes), stream.audio_data).prepare()
             if yak.status != YakStatus.TALKING:
                 # status can be changed by a call from client to the /interrupt_talking endpoint.
                 logger.debug(f"Exit stream due to status changed externally.")

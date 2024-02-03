@@ -117,9 +117,12 @@ class AzureTextToSpeech:
             )
         self.speech_synthesizer.speak_text_async(text).get()
 
-    def audio_stream_generator(self, text: str) -> speechsdk.SpeechSynthesisResult:
+    def audio_stream_generator(self, text: str, use_blendshapes: bool = False) -> speechsdk.SpeechSynthesisResult:
         """
-        Generate speech for the text passed in.
+        Generate speech
+        @args:
+            text: str: plain text to generate
+            use_blendshapes: bool: indicates if blendshapes should be retrieved from Azure.
 
         Notes:
             https://github.com/Azure-Samples/cognitive-services-speech-sdk/blob/master/samples/python/console/speech_synthesis_sample.py
@@ -136,9 +139,18 @@ class AzureTextToSpeech:
             raise RuntimeError(
                 "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream."
             )
-        result = self.speech_synthesizer.speak_text_async(
-            text
-        ).get()  # non-blocking but doesn't fullfill promise until all speeech audio is generated.
+        if use_blendshapes:
+            ssml: str = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="en-US">
+                                <voice name="{self.voice_id}">
+                                <mstts:viseme type="FacialExpression"/>
+                                {text}
+                            </voice>
+                        </speak>"""
+            result = self.speech_synthesizer.speak_ssml_async(text).get()
+        else:
+            result = self.speech_synthesizer.speak_text_async(
+                text
+            ).get()  # non-blocking but doesn't fullfill promise until all speeech audio is generated.
         return result
 
 
@@ -150,7 +162,10 @@ class AzureTTSViseme(AzureTextToSpeech):
 
     viseme_log: List[Dict] = field(factory=list)
     index: int = 0
+    use_blendshapes: bool = field(default = True)
+    blendshapes_log: List[str] = field( factory = list)
     viseme_callback: Callable = field(init=False)
+    
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
@@ -165,13 +180,18 @@ class AzureTTSViseme(AzureTextToSpeech):
             """Call back to capture viseme event details"""
             start: float = evt.audio_offset / 10000000
             msg: Dict = {"start": start, "end": 10000.0, "value": evt.viseme_id}
-            if self.index > 0:
-                self.viseme_log[-1][
-                    "end"
-                ] = start  # Update the end time marker as the start of the current time.
-            self.viseme_log.append(msg)
-            # logger.debug(f'index: {self.index},{msg}')
-            self.index += 1
+            logger.debug(evt)
+            if evt.animation == "":
+                if self.index > 0:
+                    self.viseme_log[-1][
+                        "end"
+                    ] = start  # Update the end time marker as the start of the current time.
+                self.viseme_log.append(msg)
+                # logger.debug(f'index: {self.index},{msg}')
+                self.index += 1
+            else:
+                self.blendshapes_log.append(evt.animation)
+                
             return None
 
         return _viseme_logger
@@ -179,13 +199,15 @@ class AzureTTSViseme(AzureTextToSpeech):
     def audio_viseme_generator(self, text):
         """Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events."""
         audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
-            text
+            text, self.use_blendshapes
         )
-        _log = self.viseme_log.copy()
-        self.reset_viseme_log(len(_log))
-        return audio_output, _log
+        _viseme_log = self.viseme_log.copy()
+        _blendshape_log = self.blendshapes_log.copy()
 
-    def reset_viseme_log(self, start_index: int) -> None:
+        self.reset_viseme_log(len(_viseme_log),len(_blendshape_log))
+        return audio_output, _viseme_log, _blendshape_log
+
+    def reset_viseme_log(self, start_index: int, blendshape_start) -> None:
         """
         Its possible that move events have occured since the audio stream yeilded chunks fo the viseme_log
         should be truncated to remove the old visemes.
@@ -193,6 +215,8 @@ class AzureTTSViseme(AzureTextToSpeech):
         if start_index > 0:
             self.index -= start_index
             self.viseme_log = self.viseme_log[: self.index]
+            self.blendshapes_log = self.blendshapes_log[:blendshape_start]
             # logger.debug(f"reset viseme log : {self.index}")
         else:
             self.viseme_log = []
+            self.blendshapes_log = []
