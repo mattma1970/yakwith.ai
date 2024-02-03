@@ -14,7 +14,7 @@ from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
 
-import re
+import re, json
 
 MIN_LENGTH_FOR_SYNTHESIS = 5
 
@@ -146,7 +146,7 @@ class AzureTextToSpeech:
                                 {text}
                             </voice>
                         </speak>"""
-            result = self.speech_synthesizer.speak_ssml_async(text).get()
+            result = self.speech_synthesizer.speak_ssml_async(ssml).get()
         else:
             result = self.speech_synthesizer.speak_text_async(
                 text
@@ -180,8 +180,9 @@ class AzureTTSViseme(AzureTextToSpeech):
             """Call back to capture viseme event details"""
             start: float = evt.audio_offset / 10000000
             msg: Dict = {"start": start, "end": 10000.0, "value": evt.viseme_id}
-            logger.debug(evt)
+
             if evt.animation == "":
+                logger.debug(evt)
                 if self.index > 0:
                     self.viseme_log[-1][
                         "end"
@@ -190,17 +191,24 @@ class AzureTTSViseme(AzureTextToSpeech):
                 # logger.debug(f'index: {self.index},{msg}')
                 self.index += 1
             else:
-                self.blendshapes_log.append(evt.animation)
+                animation: str = json.loads(evt.animation)
+                logger.debug(f'Animation FrameIndex: {animation["FrameIndex"]}')
+                self.blendshapes_log.append(animation)
                 
             return None
 
         return _viseme_logger
 
     def audio_viseme_generator(self, text):
-        """Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events."""
+        """
+            Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events.
+            Note: visemes and blendshapes generated asyn via the viseme_cb callback invokations and pushed to the respective logs.
+        """
         audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
             text, self.use_blendshapes
         )
+        if audio_output.audio_duration:
+            logger.debug(f'Audio Duration: {audio_output.audio_duration} (s)')
         _viseme_log = self.viseme_log.copy()
         _blendshape_log = self.blendshapes_log.copy()
 
