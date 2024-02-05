@@ -242,7 +242,11 @@ def get_avatar_config(session_id: str)-> Union[Dict, None]:
     
     if ok:
         yak: YakAgent = agent_registry[session_id]
-        ret = yak.avatar_config
+        try:
+            ret = yak.avatar_config
+        except Exception as e:
+            msg = 'SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect.';
+            ok = False
         logger.debug(f'avatarConfig: {ret}')
 
     return StdResponse(ok,msg, ret)
@@ -405,14 +409,15 @@ async def talk_with_avatar(message: ApiUserMessage):
 
     yak: YakAgent = agent_registry[session_id]
 
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
+    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None, use_blendshapes=True)
 
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter=None):
+        for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
             stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
             yield BlendShapesMultiPartResponse(json.dumps(blendshapes), json.dumps(visemes), stream.audio_data).prepare()
+            logger.debug(f'YEILDED:(B,V):: {len(blendshapes), len(visemes)}')
             if yak.status != YakStatus.TALKING:
                 # status can be changed by a call from client to the /interrupt_talking endpoint.
                 logger.debug(f"Exit stream due to status changed externally.")

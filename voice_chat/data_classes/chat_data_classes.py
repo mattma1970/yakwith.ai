@@ -264,9 +264,7 @@ class BlendShapesMultiPartResponse:
         """
         return string with boundary markers and data.
         """
-        return f"""--{self.boundary}\r\nContent-Type: application/json\r\ntype: blendshapes\r\n\r\n{self.blendshapes}\r\n{self.boundary}
-                    --{self.boundary}\r\n
-                    --{self.boundary}\r\nContent-Type: application/json\r\nType: visemes\r\n\r\n{self.json_data}\r\n{self.boundary}
-                    --{self.boundary}\r\n
-                    Content-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}
+        return f"""--{self.boundary}\r\nContent-Type: application/json\r\nType: blendshapes\r\n\r\n{self.blendshapes}\r\n{self.boundary}
+                   --{self.boundary}\r\nContent-Type: application/json\r\nType: visemes\r\n\r\n{self.json_data}\r\n{self.boundary}
+                    --{self.boundary}\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}
                 """
