@@ -220,13 +220,18 @@ class MenuHelper:
         return ok, msg
 
     @classmethod
-    def parse_dict(cls, target: Union[Dict, str], keys: Union[str,List[str]] = None, drop_keys: bool = False ) -> Union[Dict, str]:
+    def parse_dict(
+        cls,
+        target: Union[Dict, str],
+        keys: Union[str, List[str]] = None,
+        drop_keys: bool = False,
+    ) -> Union[Dict, str]:
         """
         Parse and Filter a dictionary or json string.
-        
+
         args:
             target: Union[dict|str] The dictionary which is either a dict object or a stringified version.
-            keys: Union[str],list]: Dictionary key or list of keys. 
+            keys: Union[str],list]: Dictionary key or list of keys.
                                     If 'None' then return return the entire dictionary.
         @args:
             dictionary
@@ -247,18 +252,18 @@ class MenuHelper:
         if keys is None:
             ret = _target
         else:
-            if not(isinstance(keys, list)) :
+            if not (isinstance(keys, list)):
                 _keys = [keys]
             if drop_keys:
                 ret = _target
-            else: 
+            else:
                 ret = {}
             for key in keys:
                 if key in _target:
                     if drop_keys and key in ret:
                         del ret[key]
-                    else:                       
-                        ret[key]=target[key]
+                    else:
+                        ret[key] = target[key]
         return ret
 
     @classmethod

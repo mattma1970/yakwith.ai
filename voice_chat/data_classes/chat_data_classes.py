@@ -251,6 +251,7 @@ class MultiPartResponse:
         """
         return f"--{self.boundary}\r\nContent-Type: application/json\r\n\r\n{self.json_data}\r\n{self.boundary}--frame\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}"
 
+
 @dataclass
 class BlendShapesMultiPartResponse:
     """Use for sending metadata and audio"""

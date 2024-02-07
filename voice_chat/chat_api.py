@@ -193,20 +193,20 @@ def agent_create(config: SessionStart) -> Dict:
             rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
 
             # Get avatar configurations
-            avatar_config: Dict = MenuHelper.parse_dict(cafe.avatar_settings) 
-            if 'voice' in avatar_config:
-                voice_id = avatar_config['voice']
-                del avatar_config['voice']
+            avatar_config: Dict = MenuHelper.parse_dict(cafe.avatar_settings)
+            if "voice" in avatar_config:
+                voice_id = avatar_config["voice"]
+                del avatar_config["voice"]
             else:
                 # Get the agent/avatar voice_id or fall back to system default.
                 voice_id = app_config.text_to_speech.default_voice_id
-   
+
             yak_agent = YakAgent(
                 business_uid=config.business_uid,
                 rules=rule_set,
                 stream=config.stream,
                 voice_id=voice_id,
-                avatar_config=avatar_config
+                avatar_config=avatar_config,
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -219,8 +219,9 @@ def agent_create(config: SessionStart) -> Dict:
         logger.error(msg)
     return {"status": "success" if ok else "error", "msg": msg, "payload": ""}
 
+
 @app.get("/agent/get_avatar_config/{session_id}")
-def get_avatar_config(session_id: str)-> Union[Dict, None]:
+def get_avatar_config(session_id: str) -> Union[Dict, None]:
     """
     Avatar config is used for all non-voice related.
     """
@@ -234,23 +235,22 @@ def get_avatar_config(session_id: str)-> Union[Dict, None]:
     if session_id not in agent_registry:
         msg = f"Error: Request for agent bound to session_id: {session_id} but none exists."
         ok = False
-        logger.error(
-            msg
-        )
+        logger.error(msg)
         raise RuntimeError(
             "No agent found. An agent must be created prior to starting chat."
         )
-    
+
     if ok:
         yak: YakAgent = agent_registry[session_id]
         try:
             ret = yak.avatar_config
         except Exception as e:
-            msg = 'SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect.';
+            msg = "SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect."
             ok = False
-        logger.debug(f'avatarConfig: {ret}')
+        logger.debug(f"avatarConfig: {ret}")
 
-    return StdResponse(ok,msg, ret)
+    return StdResponse(ok, msg, ret)
+
 
 @app.post("/chat_with_agent")
 def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
@@ -316,11 +316,17 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     yak: YakAgent = agent_registry[session_id]
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None, use_blendshapes=avatar_config.blendshapes)
+    TTS: AzureTextToSpeech = AzureTTSViseme(
+        voice_id=yak.voice_id,
+        audio_config=None,
+        use_blendshapes=avatar_config.blendshapes,
+    )
 
     def stream_generator(prompt):
         stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
-        yield BlendShapesMultiPartResponse(json.dumps(blendshapes), json.dumps(visemes), stream.audio_data).prepare()
+        yield BlendShapesMultiPartResponse(
+            json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+        ).prepare()
 
     logger.debug(f"Sending streaming response, session_id {session_id}")
     return StreamingResponse(
@@ -414,18 +420,18 @@ async def talk_with_avatar(message: ApiUserMessage):
     TTS: AzureTextToSpeech = AzureTTSViseme(
         voice_id=yak.voice_id,
         audio_config=None,
-        use_blendshapes=avatar_config.blendshapes
-        )
+        use_blendshapes=avatar_config.blendshapes,
+    )
 
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
         for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
             stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
-            yield BlendShapesMultiPartResponse(json.dumps(blendshapes),
-                                                json.dumps(visemes),
-                                              stream.audio_data).prepare()
-            logger.debug(f'YEILDED:(B,V):: {len(blendshapes), len(visemes)}')
+            yield BlendShapesMultiPartResponse(
+                json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+            ).prepare()
+            logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
             if yak.status != YakStatus.TALKING:
                 # status can be changed by a call from client to the /interrupt_talking endpoint.
                 logger.debug(f"Exit stream due to status changed externally.")
