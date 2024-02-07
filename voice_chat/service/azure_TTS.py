@@ -166,7 +166,9 @@ class AzureTextToSpeech:
 @define
 class AzureTTSViseme(AzureTextToSpeech):
     """
-    Extends the streaming speech synthesizer to also include viseme and blendshape data
+    Extends the streaming speech synthesizer to also include viseme and blendshape data.
+    While visemes are always returned, blendshapes are optional. If blendshapes are not generated, the blendshap_log
+    will still be returned but will be empty.
     """
 
     viseme_log: List[Dict] = field(factory=list)
@@ -186,7 +188,7 @@ class AzureTTSViseme(AzureTextToSpeech):
 
     def viseme_cb(self) -> Callable:
         def _viseme_logger(evt):
-            """Call back to capture viseme event details"""
+            """Call back to capture viseme and blendshapes"""
             start: float = evt.audio_offset / 10000000
             msg: Dict = {"start": start, "end": 10000.0, "value": evt.viseme_id}
 
@@ -200,7 +202,7 @@ class AzureTTSViseme(AzureTextToSpeech):
                 # logger.debug(f'index: {self.index},{msg}')
                 self.index += 1
             else:
-                # evt.animation will be empty string if only visemes are generated using ssml.
+                # evt.animation will be empty string if only visemes are generated.
                 animation: str = json.loads(evt.animation)
                 #logger.debug(f'{evt} + Animation FrameIndex: {animation["FrameIndex"]}')
                 self.blendshapes_log.extend(animation['BlendShapes']) # Drop frameindex for speed of parsing at client.               
@@ -230,7 +232,7 @@ class AzureTTSViseme(AzureTextToSpeech):
 
     def audio_stream_generator(self, text: str) -> speechsdk.SpeechSynthesisResult:
         """
-        Generate speech
+        Generate speech. Visemes are always returned. Blendshapes, that will depend on whether use_blendshapes is set.
         @args:
             text: str: plain text to generate
             use_blendshapes: bool: indicates if blendshapes should be retrieved from Azure.

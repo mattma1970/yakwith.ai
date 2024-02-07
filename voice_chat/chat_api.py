@@ -48,6 +48,7 @@ from voice_chat.data_classes.mongodb_helper import (
     ServicesHelper,
     DataHelper,
 )
+from voice_chat.data_classes.avatar_config import AvatarConfigParser
 
 from bson import ObjectId
 
@@ -314,8 +315,8 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
+    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
+    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None, use_blendshapes=avatar_config.blendshapes)
 
     def stream_generator(prompt):
         stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
@@ -352,7 +353,7 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 def talk_with_agent(message: ApiUserMessage) -> Dict:
     """
     Get a synthesised voice for the stream LLM response and send that audio data back to the app.
-    Does not generate Visemes for lipsync. See /talk_with_avatar for visemes.
+    Does NOT generate Visemes for lipsync. See /talk_with_avatar for visemes.
     Forces streaming response regardless of Agent settings.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
@@ -392,7 +393,7 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
 @app.post("/agent/talk_with_avatar")
 async def talk_with_avatar(message: ApiUserMessage):
     """
-    Get text to speech and the viseme data for lipsync.
+    Get text to speech and the viseme data for lipsync and optionally blendshapes
     Can be interrupted.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
@@ -408,15 +409,22 @@ async def talk_with_avatar(message: ApiUserMessage):
         )
 
     yak: YakAgent = agent_registry[session_id]
+    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
 
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None, use_blendshapes=True)
+    TTS: AzureTextToSpeech = AzureTTSViseme(
+        voice_id=yak.voice_id,
+        audio_config=None,
+        use_blendshapes=avatar_config.blendshapes
+        )
 
     response = Stream(yak.agent).run(message.user_input)
 
     def stream_generator(response) -> Tuple[Any, str]:
         for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
             stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
-            yield BlendShapesMultiPartResponse(json.dumps(blendshapes), json.dumps(visemes), stream.audio_data).prepare()
+            yield BlendShapesMultiPartResponse(json.dumps(blendshapes),
+                                                json.dumps(visemes),
+                                              stream.audio_data).prepare()
             logger.debug(f'YEILDED:(B,V):: {len(blendshapes), len(visemes)}')
             if yak.status != YakStatus.TALKING:
                 # status can be changed by a call from client to the /interrupt_talking endpoint.

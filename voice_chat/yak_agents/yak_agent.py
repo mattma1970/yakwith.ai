@@ -85,7 +85,7 @@ class YakAgent:
     )  # Access via status property
 
     voice_id: str = field()  # Agent voice id from STT provider.
-    avatar_config: Dict = field(default=Factory(dict))  # Primarily for avatar animations.
+    avatar_config: Dict = field(default=Factory(dict))  # Primarily for avatar animations including blendshapes.
 
     def __attrs_post_init__(self):
         try:
@@ -117,30 +117,28 @@ class YakAgent:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
 
-        self.agent = Agent(
-            prompt_driver=HuggingFaceInferenceClientPromptDriver(
-                token=self.model_driver_config.token,
-                model=self.model_driver_config.model,
-                pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
-                params=self.model_driver_config.params,
-                task=self.model_driver_config.task,
-                stream=self.model_driver_config.stream,
-                stream_chunk_size=self.model_driver_config.stream_chunk_size,
-            ),
-            # event_listeners=self.streaming_event_listeners,
-            logger_level=logging.ERROR,
-            rules=[Rule(rule) for rule in self.rules],
-            stream=self.stream,
-            # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
-        )
+        """         self.agent = Agent(
+        prompt_driver=HuggingFaceInferenceClientPromptDriver(
+            token=self.model_driver_config.token,
+            model=self.model_driver_config.model,
+            pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
+            params=self.model_driver_config.params,
+            task=self.model_driver_config.task,
+            stream=self.model_driver_config.stream,
+            stream_chunk_size=self.model_driver_config.stream_chunk_size,
+        ),
+        # event_listeners=self.streaming_event_listeners,
+        logger_level=logging.ERROR,
+        rules=[Rule(rule) for rule in self.rules],
+        stream=self.stream,
+        # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
+        ) """
 
-        """
-            self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=self.stream),
-                            logger_level=logging.ERROR,
-                            rules= self.rules,
-                            stream=self.stream,)
-        pass 
-        """
+        self.agent = Agent(prompt_driver=OpenAiChatPromptDriver(model='gpt-3.5-turbo', stream=self.stream),
+        logger_level=logging.ERROR,
+        rules=[Rule(rule) for rule in self.rules],
+        stream=self.stream,)
+
 
         self.status = YakStatus.IDLE
 
