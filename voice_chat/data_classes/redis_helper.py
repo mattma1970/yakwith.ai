@@ -10,25 +10,30 @@ import pickle
 
 logger = logging.getLogger(__name__)
 
+
 class RedisHelper:
     def __init__(self, db=0):
         self.db_name = db
-        self.redis_client = redis.Redis(host=os.environ['REDIS_HOST'], port=os.environ['REDIS_PORT'], db=db)
-        self.running = False # Flag indicating there is a running redis server.
+        self.redis_client = redis.Redis(
+            host=os.environ["REDIS_HOST"], port=os.environ["REDIS_PORT"], db=db
+        )
+        self.running = False  # Flag indicating there is a running redis server.
         try:
             self.redis_client.ping()
             self.running = True
         except RuntimeError:
-            logger.error('Redis server is not running or could not be connected to.Please check.')
+            logger.error(
+                "Redis server is not running or could not be connected to.Please check."
+            )
 
     def select_database(redis_client, db):
-        """ If the database is persisted and that database has db value other than 0, then you'll need to select the database manaully."""
+        """If the database is persisted and that database has db value other than 0, then you'll need to select the database manaully."""
         redis_client.select(db)
 
     def safe_key(self, key):
-        return re.sub(r'[^a-zA-Z0-9,\s\.]','',key)
+        return re.sub(r"[^a-zA-Z0-9,\s\.]", "", key)
 
-    # CRUD string datatypes    
+    # CRUD string datatypes
     def create(self, key, value):
         return self.redis_client.set(key, value)
 
@@ -50,7 +55,7 @@ class RedisHelper:
     # Hash datatypes ( python dictionaries)
     def hset(self, name, key, value):
         return self.redis_client.hset(name, key, value)
-    
+
     # Function to create or append cache entry
     def append_to_cache(self, key, subkey, value):
         # Check if the key already exists in the cache
@@ -87,4 +92,3 @@ class RedisHelper:
 
     def hkeys(self, name):
         return self.redis_client.hkeys(name)
-
