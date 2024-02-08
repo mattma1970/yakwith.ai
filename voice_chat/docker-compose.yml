@@ -1,5 +1,14 @@
 version: '3.8'
 services:
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis-stack-server
+    ports: 
+      - '6379:6379'
+    volumes:
+      - type: bind
+        source: "${APPLICATION_ROOT_FOLDER}/${REDIS_DATA_FOLDER}"
+        target: /data/redis
   mongodb:
     image: mongo:6-jammy
     container_name: yakwithai_mongo
