@@ -5,6 +5,7 @@ from pymongo import MongoClient
 from uuid import uuid4
 import logging
 import os
+import json
 from pydantic import BaseModel, validator
 from pydantic.dataclasses import dataclass
 from dataclasses import field  # pydantic.dataclasses doesn't ahve a field method
@@ -131,3 +132,28 @@ class Cafe:
             notes=data.get("notes", ""),
             model=data.get("model"),
         )
+
+
+@dataclass(kw_only=True)
+class ModelChoice:
+    """LLM model spec for model collection"""
+    id: str = field(default ="")
+    name: str = field(default="")
+    config: List[Union[Dict]] = field(default_factory=list)
+    provider: str = field(default="")
+    model_driver_name: Optional[str] = field(init=False)
+
+    @classmethod
+    def from_dict(cls, data:Dict):
+        id = data["id"]
+        name = data.get("name","")
+        config = [_config for _config in data.get("config",[])]
+        provider = data.get("provider","")
+    @classmethod
+    def to_dict(self):
+        return {
+                "id": self.id,
+                "name": self.name,
+                "config": self.config,
+                "provider": self.provider
+                }
