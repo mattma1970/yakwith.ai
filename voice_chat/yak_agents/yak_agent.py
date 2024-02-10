@@ -119,7 +119,7 @@ class YakAgent:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
 
-        """         self.agent = Agent(
+        self.agent = Agent(
         prompt_driver=HuggingFaceInferenceClientPromptDriver(
             token=self.model_driver_config.token,
             model=self.model_driver_config.model,
@@ -134,16 +134,16 @@ class YakAgent:
         rules=[Rule(rule) for rule in self.rules],
         stream=self.stream,
         # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
-        ) """
+        )
 
-        self.agent = Agent(
+        """ self.agent = Agent(
             prompt_driver=OpenAiChatPromptDriver(
                 model="gpt-3.5-turbo", stream=self.stream
             ),
             logger_level=logging.ERROR,
             rules=[Rule(rule) for rule in self.rules],
             stream=self.stream,
-        )
+        ) """
 
         self.status = YakStatus.IDLE
 
@@ -159,6 +159,10 @@ class YakAgent:
     def run(self, *args, **kwargs):
         return self.agent.run(*args, **kwargs)
 
+    @property
+    def usingCache(self) -> bool:
+        """usecache is a setting in avatar settings json."""
+        return ('usecache' in self.avatar_config and self.avatar_config['usecache'])
 
 if __name__ == "__main__":
     """yak = YakAgent(

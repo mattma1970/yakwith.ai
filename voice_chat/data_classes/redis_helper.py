@@ -56,7 +56,7 @@ class RedisHelper:
     def hset(self, name, key, value):
         return self.redis_client.hset(name, key, value)
 
-    # Function to create or append cache entry
+    # Function to create or append to list types in a cache entry
     def append_to_cache(self, key, subkey, value):
         # Check if the key already exists in the cache
         if self.exists(key):

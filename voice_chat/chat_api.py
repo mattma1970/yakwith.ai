@@ -81,7 +81,7 @@ app = FastAPI()
     Deal with CORS issues of browser calling browser from different ports or names.
     https://fastapi.tiangolo.com/tutorial/cors/
 """
-origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai"]
+origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai","https://dev.d2civivj65v1p0.amplifyapp.com"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -432,13 +432,13 @@ async def talk_with_avatar(message: ApiUserMessage):
     cache_key: str = ""
     cached_response: Dict = {}
 
-    if redis:
+    if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
-        cache_key = f"{yak.voice_id}:::{redis.safe_key(message.user_input)}"
+        cache_key = f"{yak.voice_id}:::{cache.safe_key(message.user_input)}"
         if has_pronouns(message.user_input) == False:
-            cached_response = redis.hgetall(name=cache_key)
+            cached_response = cache.hgetall(name=cache_key)
 
-    if redis and cached_response and len(cached_response) > 0:
+    if cache and cached_response and len(cached_response) > 0:
         logger.info(f"Cache Hit for {cache_key}")
 
         def cached_stream_generator(cached_data):
@@ -448,7 +448,7 @@ async def talk_with_avatar(message: ApiUserMessage):
             #  and retrieved as byte strings by redis-py.
             logger.debug("Yielding from cache")
             response, blendshapes, visemes, audio = (
-                pickle.loads(cached_data[b"response"]),
+                cached_data[b"response"],
                 pickle.loads(cached_data[b"blendshapes"]),
                 pickle.loads(cached_data[b"visemes"]),
                 pickle.loads(cached_data[b"audio"]),
@@ -460,7 +460,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
             yak.status = YakStatus.IDLE
             # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
-            yak.agent.memory.add_run(Run(input=message.user_input, output=response))
+            yak.agent.memory.add_run(Run(input=message.user_input, output=response.decode('ascii'))) #response is binary string due to teh way Redis stores data.
 
         return StreamingResponse(
             cached_stream_generator(cached_response),
@@ -487,18 +487,16 @@ async def talk_with_avatar(message: ApiUserMessage):
                 yield BlendShapesMultiPartResponse(
                     json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
                 ).prepare()
-                full_text.append(phrase)
-                # If using a cache then append the new data to the cache record holding all the chunks.
-                if redis is not None:
-                    # Redis stores values as strings
-                    redis.append_to_cache(cache_key, "blendshapes", blendshapes)
-                    redis.append_to_cache(cache_key, "visemes", visemes)
-                    redis.append_to_cache(cache_key, "audio", stream.audio_data)
-                    logger.debug(f"Add chunks to cache")
 
-                redis.append_to_cache(
-                    cache_key, "response", full_text
-                )  # Add the full text of the response for usin in conversation memory.
+                # Deal with caching of audio/visemes/blendshapes
+                # If using a cache then append the new data to the cache record holding all the chunks.
+                if yak.usingCache and cache is not None:
+                    full_text.append(phrase)
+                    # Redis stores values as strings
+                    cache.append_to_cache(cache_key, "blendshapes", blendshapes)
+                    cache.append_to_cache(cache_key, "visemes", visemes)
+                    cache.append_to_cache(cache_key, "audio", stream.audio_data)
+                    logger.debug(f"Add chunks to cache")
 
                 logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
                 logger.debug(
@@ -510,6 +508,11 @@ async def talk_with_avatar(message: ApiUserMessage):
                     logger.debug(f"Exit stream due to status changed externally.")
                     break
 
+            if yak.usingCache:
+                cache.hset(
+                    cache_key, "response", ''.join(full_text)
+                )  # Add the full text of the response for usin in conversation memory.
+
             # After yeilding all the cached audio, set status to idle.
             yak.status = YakStatus.IDLE
 
@@ -519,7 +522,6 @@ async def talk_with_avatar(message: ApiUserMessage):
             stream_generator(response),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
-
 
 @app.get("/agent/interrupt/{session_id}")
 def agent_interrupt(session_id: str):
@@ -898,9 +900,9 @@ if __name__ == "__main__":
 
     # Redis is used for caching LLM, and TTS results for improved latency.
     if os.environ["USE_API_CACHE"]:
-        redis = RedisHelper()
+        cache = RedisHelper()
     else:
-        redis = None
+        cache = None
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)
