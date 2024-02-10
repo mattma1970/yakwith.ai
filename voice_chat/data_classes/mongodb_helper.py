@@ -34,8 +34,6 @@ class DatabaseConfig:
         self.cafes = self.db[config.database.default_collection]
         self.services = self.db[config.database.services_collection]
         self.data = self.db[config.database.data_collection]
-        self.models = self.db[config.database.models_collection]
-
 
 class DataHelper:
     """
@@ -221,13 +219,18 @@ class MenuHelper:
         return ok, msg
 
     @classmethod
-    def parse_dict(cls, target: Union[Dict, str], keys: Union[str,List[str]] = None, drop_keys: bool = False ) -> Union[Dict, str]:
+    def parse_dict(
+        cls,
+        target: Union[Dict, str],
+        keys: Union[str, List[str]] = None,
+        drop_keys: bool = False,
+    ) -> Union[Dict, str]:
         """
         Parse and Filter a dictionary or json string.
-        
+
         args:
             target: Union[dict|str] The dictionary which is either a dict object or a stringified version.
-            keys: Union[str],list]: Dictionary key or list of keys. 
+            keys: Union[str],list]: Dictionary key or list of keys.
                                     If 'None' then return return the entire dictionary.
         @args:
             dictionary
@@ -248,18 +251,18 @@ class MenuHelper:
         if keys is None:
             ret = _target
         else:
-            if not(isinstance(keys, list)) :
+            if not (isinstance(keys, list)):
                 _keys = [keys]
             if drop_keys:
                 ret = _target
-            else: 
+            else:
                 ret = {}
             for key in keys:
                 if key in _target:
                     if drop_keys and key in ret:
                         del ret[key]
-                    else:                       
-                        ret[key]=target[key]
+                    else:
+                        ret[key] = target[key]
         return ret
 
     @classmethod
@@ -534,17 +537,17 @@ class ModelHelper:
     def get_model_by_id(cls,db: DatabaseConfig, id:str) -> ModelChoice:
         model : ModelChoice = None
         try:
-            model_details: Dict = db.models.find_one({"id":id})
+            model_details: Dict = db.data.find_one({"id":id,"table_name":"models"})
             model = ModelChoice.from_dict(model_details)
         except Exception as e:
-            logger.error(f'No record found for model id: {id}')
+            logger.error(f'No record found for model id: {id}, error {e}')
         return model
     
     def upsert_from_dict(cls, db: DatabaseConfig, model_details: Dict):
         msg: str = ""
         ok: bool = False
         try:
-            db.models.update_one({"id":model_details["id"]},{"$set":ModelChoice.from_dict(model_details)}, upsert=True)
+            db.data.update_one({"id":model_details["id"], "table_name":"models"},{"$set":ModelChoice.from_dict(model_details)}, upsert=True)
         except Exception as e:
             msg = f'Failed to add model to model collection: {e}'
             logger.error(msg)

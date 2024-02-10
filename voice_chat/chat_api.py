@@ -9,6 +9,8 @@ from pathlib import Path
 import base64
 import math
 import urllib
+import pickle
+import ast
 
 from PIL import Image
 import io
@@ -39,6 +41,7 @@ from voice_chat.data_classes.chat_data_classes import (
     ServiceAgentRequest,
     StdResponse,
     MultiPartResponse,
+    BlendShapesMultiPartResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
 from voice_chat.data_classes.mongodb_helper import (
@@ -46,12 +49,17 @@ from voice_chat.data_classes.mongodb_helper import (
     DatabaseConfig,
     ServicesHelper,
     DataHelper,
+    ModelChoice, ModelHelper
 )
+from voice_chat.data_classes.avatar_config import AvatarConfigParser
+from voice_chat.data_classes.redis_helper import RedisHelper
 
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy
 from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+
+from voice_chat.utils import has_pronouns
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -74,7 +82,7 @@ app = FastAPI()
     Deal with CORS issues of browser calling browser from different ports or names.
     https://fastapi.tiangolo.com/tutorial/cors/
 """
-origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai"]
+origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai","https://dev.d2civivj65v1p0.amplifyapp.com"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -172,6 +180,8 @@ def agent_create(config: SessionStart) -> Dict:
         menu: Menu = MenuHelper.get_one_menu(
             database, business_uid=config.business_uid, menu_id=config.menu_id
         )
+        model_choice: ModelChoice = ModelHelper.get_model_by_id(database,cafe.model)
+
         if menu is None:
             return {
                 "status": "error",
@@ -191,25 +201,26 @@ def agent_create(config: SessionStart) -> Dict:
             rule_set = list(filter(lambda x: len(x.strip()) > 0, rule_set))
 
             # Get avatar configurations
-            avatar_config: Dict = MenuHelper.parse_dict(cafe.avatar_settings) 
-            if 'voice' in avatar_config:
-                voice_id = avatar_config['voice']
-                del avatar_config['voice']
+            avatar_config: Dict = MenuHelper.parse_dict(cafe.avatar_settings)
+            if "voice" in avatar_config:
+                voice_id = avatar_config["voice"]
+                del avatar_config["voice"]
             else:
                 # Get the agent/avatar voice_id or fall back to system default.
                 voice_id = app_config.text_to_speech.default_voice_id
-   
+
             yak_agent = YakAgent(
                 business_uid=config.business_uid,
                 rules=rule_set,
                 stream=config.stream,
                 voice_id=voice_id,
-                avatar_config=avatar_config
+                avatar_config=avatar_config,
+                model_choice = model_choice
             )
 
         agent_registry[config.session_id] = yak_agent
         logger.info(
-            f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}"
+            f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}, llm:{model_choice.name}"
         )
         ok = True
     except Exception as e:
@@ -217,8 +228,9 @@ def agent_create(config: SessionStart) -> Dict:
         logger.error(msg)
     return {"status": "success" if ok else "error", "msg": msg, "payload": ""}
 
+
 @app.get("/agent/get_avatar_config/{session_id}")
-def get_avatar_config(session_id: str)-> Union[Dict, None]:
+def get_avatar_config(session_id: str) -> Union[Dict, None]:
     """
     Avatar config is used for all non-voice related.
     """
@@ -232,19 +244,22 @@ def get_avatar_config(session_id: str)-> Union[Dict, None]:
     if session_id not in agent_registry:
         msg = f"Error: Request for agent bound to session_id: {session_id} but none exists."
         ok = False
-        logger.error(
-            msg
-        )
+        logger.error(msg)
         raise RuntimeError(
             "No agent found. An agent must be created prior to starting chat."
         )
-    
+
     if ok:
         yak: YakAgent = agent_registry[session_id]
-        ret = yak.avatar_config
-        logger.debug(f'avatarConfig: {ret}')
+        try:
+            ret = yak.avatar_config
+        except Exception as e:
+            msg = "SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect."
+            ok = False
+        logger.debug(f"avatarConfig: {ret}")
 
-    return StdResponse(ok,msg, ret)
+    return StdResponse(ok, msg, ret)
+
 
 @app.post("/chat_with_agent")
 def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
@@ -309,12 +324,18 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
+    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
+    TTS: AzureTextToSpeech = AzureTTSViseme(
+        voice_id=yak.voice_id,
+        audio_config=None,
+        use_blendshapes=avatar_config.blendshapes,
+    )
 
     def stream_generator(prompt):
-        stream, visemes = TTS.audio_viseme_generator(prompt)
-        yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
+        stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+        yield BlendShapesMultiPartResponse(
+            json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+        ).prepare()
 
     logger.debug(f"Sending streaming response, session_id {session_id}")
     return StreamingResponse(
@@ -347,7 +368,7 @@ def get_last_response(session_id: str) -> Dict[str, str]:
 def talk_with_agent(message: ApiUserMessage) -> Dict:
     """
     Get a synthesised voice for the stream LLM response and send that audio data back to the app.
-    Does not generate Visemes for lipsync. See /talk_with_avatar for visemes.
+    Does NOT generate Visemes for lipsync. See /talk_with_avatar for visemes.
     Forces streaming response regardless of Agent settings.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
@@ -387,11 +408,13 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
 @app.post("/agent/talk_with_avatar")
 async def talk_with_avatar(message: ApiUserMessage):
     """
-    Get text to speech and the viseme data for lipsync.
+    Get text to speech and the viseme data for lipsync and optionally blendshapes
     Can be interrupted.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
     logger.debug(f"User input: {message.user_input}")
+
+    logger.debug(f"TIMER: Recieved text request @ {datetime.now().timestamp()*1000}")
 
     session_id: str = message.session_id
     if session_id not in agent_registry:
@@ -403,28 +426,106 @@ async def talk_with_avatar(message: ApiUserMessage):
         )
 
     yak: YakAgent = agent_registry[session_id]
+    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
 
-    TTS: AzureTextToSpeech = AzureTTSViseme(voice_id=yak.voice_id, audio_config=None)
+    # Check if the text and response is already cached.
+    # IMPORTANT: If the text is a follow up question ( refering to revious parts of the conversation) this can lead to irrelevant responses.
+    # Eventually we'll need to introduce some logic to classify if the question is refering to previous conversations turns or is standalone.
+    # e.g Does the carrot cake contain nuts? vs. does it have nuts.
+    # Short term solution is to filter out input text that contains pronouns such as it, they, its etc.
+    cache_key: str = ""
+    cached_response: Dict = {}
 
-    response = Stream(yak.agent).run(message.user_input)
+    if yak.usingCache and cache is not None:
+        # check the cache for the key f'voice_id:::<<message.user_input>>
+        cache_key = f"{yak.voice_id}:::{cache.safe_key(message.user_input)}"
+        if has_pronouns(message.user_input) == False:
+            cached_response = cache.hgetall(name=cache_key)
 
-    def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter=None):
-            stream, visemes = TTS.audio_viseme_generator(phrase)
-            yield MultiPartResponse(json.dumps(visemes), stream.audio_data).prepare()
-            if yak.status != YakStatus.TALKING:
-                # status can be changed by a call from client to the /interrupt_talking endpoint.
-                logger.debug(f"Exit stream due to status changed externally.")
-                break
-        yak.status = YakStatus.IDLE
+    if cache and cached_response and len(cached_response) > 0:
+        logger.info(f"Cache Hit for {cache_key}")
 
-    yak.agent_status = YakStatus.TALKING
+        def cached_stream_generator(cached_data):
+            # Expects data of the form {'audio':[], 'visemes': [], 'blendshapes': []}
+            # Where each element in the list is a chunk of that data previously generated by STT.
+            # Data is stroed as strings in redis and so much be converted back to the proper types for blendshapes, visemes, audio
+            #  and retrieved as byte strings by redis-py.
+            logger.debug("Yielding from cache")
+            response, blendshapes, visemes, audio = (
+                cached_data[b"response"],
+                pickle.loads(cached_data[b"blendshapes"]),
+                pickle.loads(cached_data[b"visemes"]),
+                pickle.loads(cached_data[b"audio"]),
+            )
+            for i in range(len(visemes)):
+                yield BlendShapesMultiPartResponse(
+                    json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
+                ).prepare()
 
-    return StreamingResponse(
-        stream_generator(response),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
+            yak.status = YakStatus.IDLE
+            # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
+            yak.agent.memory.add_run(Run(input=message.user_input, output=response.decode('ascii'))) #response is binary string due to teh way Redis stores data.
 
+        return StreamingResponse(
+            cached_stream_generator(cached_response),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+    else:
+        # Use the LLM to get the response back.
+        TTS: AzureTextToSpeech = AzureTTSViseme(
+            voice_id=yak.voice_id,
+            audio_config=None,
+            use_blendshapes=avatar_config.blendshapes,
+        )
+
+        response = Stream(yak.agent).run(message.user_input)
+
+        def stream_generator(response) -> Tuple[Any, str]:
+            full_text: List = []
+            for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
+                logger.debug(
+                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
+                )
+                stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
+
+                yield BlendShapesMultiPartResponse(
+                    json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+                ).prepare()
+
+                # Deal with caching of audio/visemes/blendshapes
+                # If using a cache then append the new data to the cache record holding all the chunks.
+                if yak.usingCache and cache is not None:
+                    full_text.append(phrase)
+                    # Redis stores values as strings
+                    cache.append_to_cache(cache_key, "blendshapes", blendshapes)
+                    cache.append_to_cache(cache_key, "visemes", visemes)
+                    cache.append_to_cache(cache_key, "audio", stream.audio_data)
+                    logger.debug(f"Add chunks to cache")
+
+                logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
+                logger.debug(
+                    f"TIMER: Yeilded audio chunk @ {datetime.now().timestamp()*1000}"
+                )
+
+                if yak.status != YakStatus.TALKING:
+                    # status can be changed by a call from client to the /interrupt_talking endpoint.
+                    logger.debug(f"Exit stream due to status changed externally.")
+                    break
+
+            if yak.usingCache:
+                cache.hset(
+                    cache_key, "response", ''.join(full_text)
+                )  # Add the full text of the response for usin in conversation memory.
+
+            # After yeilding all the cached audio, set status to idle.
+            yak.status = YakStatus.IDLE
+
+        yak.agent_status = YakStatus.TALKING
+
+        return StreamingResponse(
+            stream_generator(response),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
 
 @app.get("/agent/interrupt/{session_id}")
 def agent_interrupt(session_id: str):
@@ -794,11 +895,18 @@ if __name__ == "__main__":
         default="/home/mtman/Documents/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
     )
     args = parser.parse_args()
+    load_dotenv()  # load all the environment variables
 
     app_config = OmegaConf.load(args.config_path)
 
-    # Instantiate Mongo class that provides API for pymongo interaction with mongodb.
+    # Instantiate a Mongo class that provides API for pymongo interaction with mongodb.
     database = DatabaseConfig(app_config)
+
+    # Redis is used for caching LLM, and TTS results for improved latency.
+    if os.environ["USE_API_CACHE"]:
+        cache = RedisHelper()
+    else:
+        cache = None
 
     logger = logging.getLogger("YakChatAPI")
     logger.setLevel(logging.DEBUG)

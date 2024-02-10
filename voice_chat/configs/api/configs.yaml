@@ -4,7 +4,7 @@ api:
 # Credentials stored in .env
 database:
   url: localhost:27017
-  name: yak_test_db
+  name: yak_test_db # mongodb database
   default_collection: cafes
   services_collection: services # Collection of miscellaneous tables (e.g for populating defaults)
   data_collection: data # Collection containing miscellaneous data e.g. for populating dropdown, avatar configurations, model configs.

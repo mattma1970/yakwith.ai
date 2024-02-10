@@ -49,3 +49,13 @@ def remove_problem_chars(
     except Exception as e:
         logger.error(e)
     return ret
+
+
+def has_pronouns(text: str, additional_words: List[str] = []) -> bool:
+    pronouns: List[str] = ["its", "it's", "they"]
+    pronouns.extend(additional_words)
+    pronouns_check = [
+        bool(re.search(r"\b" + re.escape(pronoun) + r"\b", text))
+        for pronoun in pronouns
+    ]
+    return any(pronouns_check)

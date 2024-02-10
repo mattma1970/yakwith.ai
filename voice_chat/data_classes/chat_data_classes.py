@@ -250,3 +250,22 @@ class MultiPartResponse:
         return string with boundary markers and data.
         """
         return f"--{self.boundary}\r\nContent-Type: application/json\r\n\r\n{self.json_data}\r\n{self.boundary}--frame\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}"
+
+
+@dataclass
+class BlendShapesMultiPartResponse:
+    """Use for sending metadata and audio"""
+
+    blendshapes: str
+    json_data: str
+    audio_bytes: bytes
+    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+
+    def prepare(self) -> str:
+        """
+        return string with boundary markers and data.
+        """
+        return f"""--{self.boundary}\r\nContent-Type: application/json\r\nType: blendshapes\r\n\r\n{self.blendshapes}\r\n{self.boundary}
+                   --{self.boundary}\r\nContent-Type: application/json\r\nType: visemes\r\n\r\n{self.json_data}\r\n{self.boundary}
+                    --{self.boundary}\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}
+                """

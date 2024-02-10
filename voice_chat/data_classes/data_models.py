@@ -141,14 +141,19 @@ class ModelChoice:
     name: str = field(default="")
     config: List[Union[Dict]] = field(default_factory=list)
     provider: str = field(default="")
-    model_driver_name: Optional[str] = field(init=False)
+    model_driver_name: Optional[str] = field(default="")
 
     @classmethod
-    def from_dict(cls, data:Dict):
-        id = data["id"]
-        name = data.get("name","")
-        config = [_config for _config in data.get("config",[])]
-        provider = data.get("provider","")
+    def from_dict(cls, data: Dict):
+        a: ModelChoice = cls(
+            id = data["id"],
+            name = data.get("name",""),
+            config = [_config for _config in data.get("config",[])],
+            provider = data.get("provider",""),
+            model_driver_name = data.get("model_driver_name",""),
+        )
+        return a
+        
     @classmethod
     def to_dict(self):
         return {
