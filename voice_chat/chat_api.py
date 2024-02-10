@@ -49,6 +49,7 @@ from voice_chat.data_classes.mongodb_helper import (
     DatabaseConfig,
     ServicesHelper,
     DataHelper,
+    ModelChoice, ModelHelper
 )
 from voice_chat.data_classes.avatar_config import AvatarConfigParser
 from voice_chat.data_classes.redis_helper import RedisHelper
@@ -179,6 +180,8 @@ def agent_create(config: SessionStart) -> Dict:
         menu: Menu = MenuHelper.get_one_menu(
             database, business_uid=config.business_uid, menu_id=config.menu_id
         )
+        model_choice: ModelChoice = ModelHelper.get_model_by_id(database,cafe.model)
+
         if menu is None:
             return {
                 "status": "error",
@@ -212,11 +215,12 @@ def agent_create(config: SessionStart) -> Dict:
                 stream=config.stream,
                 voice_id=voice_id,
                 avatar_config=avatar_config,
+                model_choice = model_choice
             )
 
         agent_registry[config.session_id] = yak_agent
         logger.info(
-            f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}"
+            f"Ok. Created agent for {config.business_uid}, menu_id {config.menu_id} with session_id {config.session_id}, llm:{model_choice.name}"
         )
         ok = True
     except Exception as e:

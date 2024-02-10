@@ -14,7 +14,7 @@ import base64
 from itertools import chain
 import json
 
-from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
+from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector, ModelChoice
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,6 @@ class DatabaseConfig:
         self.cafes = self.db[config.database.default_collection]
         self.services = self.db[config.database.services_collection]
         self.data = self.db[config.database.data_collection]
-
 
 class DataHelper:
     """
@@ -529,3 +528,30 @@ class MenuHelper:
             logger.error(f"collate_text failed for grp_id=={grp_id} ")
 
         return True, msg, count, primary_menu_id
+
+
+class ModelHelper:
+    """Helper functions for models collection which stored details of the model used by the establishment."""
+    
+    @classmethod
+    def get_model_by_id(cls,db: DatabaseConfig, id:str) -> ModelChoice:
+        model : ModelChoice = None
+        try:
+            model_details: Dict = db.data.find_one({"id":id,"table_name":"models"})
+            model = ModelChoice.from_dict(model_details)
+        except Exception as e:
+            logger.error(f'No record found for model id: {id}, error {e}')
+        return model
+    
+    def upsert_from_dict(cls, db: DatabaseConfig, model_details: Dict):
+        msg: str = ""
+        ok: bool = False
+        try:
+            db.data.update_one({"id":model_details["id"], "table_name":"models"},{"$set":ModelChoice.from_dict(model_details)}, upsert=True)
+        except Exception as e:
+            msg = f'Failed to add model to model collection: {e}'
+            logger.error(msg)
+        return ok, msg
+
+                
+

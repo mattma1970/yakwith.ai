@@ -22,6 +22,7 @@ import logging
 from omegaconf import OmegaConf
 
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
+from voice_chat.data_classes.mongodb_helper import ModelHelper, ModelChoice
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,10 @@ class YakAgent:
     """
 
     business_uid: str = field(default="default", kw_only=True)
-    model_driver_config_name: Optional[str] = field(default="default_model_driver")
+    model_choice: ModelChoice = field(default=None) # User choice of model in settings.
+
     model_driver_config: Optional[ModelDriverConfiguration] = field(default=None)
+
     rule_names: Optional[Dict] = field(
         default=Factory(dict)
     )  # TODO remove. deprecated after adding mongo backend
@@ -92,11 +95,11 @@ class YakAgent:
     def __attrs_post_init__(self):
         try:
             if self.model_driver_config is None:
-                if ".yaml" not in self.model_driver_config_name:
-                    self.model_driver_config_name += ".yaml"
+                if ".yaml" not in self.model_choice.provider:
+                    self.model_choice.model_driver_name += ".yaml"
                 config_filename = os.path.join(
                     f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}",
-                    self.model_driver_config_name,
+                    self.model_choice.model_driver_name,
                 )
                 self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
                     OmegaConf.load(config_filename)
@@ -118,33 +121,35 @@ class YakAgent:
         else:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
-
-        self.agent = Agent(
-        prompt_driver=HuggingFaceInferenceClientPromptDriver(
-            token=self.model_driver_config.token,
-            model=self.model_driver_config.model,
-            pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
-            params=self.model_driver_config.params,
-            task=self.model_driver_config.task,
-            stream=self.model_driver_config.stream,
-            stream_chunk_size=self.model_driver_config.stream_chunk_size,
-        ),
-        # event_listeners=self.streaming_event_listeners,
-        logger_level=logging.ERROR,
-        rules=[Rule(rule) for rule in self.rules],
-        stream=self.stream,
-        # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
-        )
-
-        """ self.agent = Agent(
-            prompt_driver=OpenAiChatPromptDriver(
-                model="gpt-3.5-turbo", stream=self.stream
+        
+        if self.model_choice.provider == "tgi.local":
+            self.agent = Agent(
+            prompt_driver=HuggingFaceInferenceClientPromptDriver(
+                token=self.model_driver_config.token,
+                model=self.model_driver_config.model,
+                pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
+                params=self.model_driver_config.params,
+                task=self.model_driver_config.task,
+                stream=self.model_driver_config.stream,
+                stream_chunk_size=self.model_driver_config.stream_chunk_size,
             ),
+            # event_listeners=self.streaming_event_listeners,
             logger_level=logging.ERROR,
             rules=[Rule(rule) for rule in self.rules],
             stream=self.stream,
-        ) """
-
+            # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
+            )
+        elif self.model_choice.provider=="openai":
+            self.agent = Agent(
+                prompt_driver=OpenAiChatPromptDriver(
+                    model=self.model_choice.name, stream=self.stream
+                ),
+                logger_level=logging.ERROR,
+                rules=[Rule(rule) for rule in self.rules],
+                stream=self.stream,
+            )
+        else:
+            logger.error('ModelChoice provider is not recognised.')
         self.status = YakStatus.IDLE
 
     @property
