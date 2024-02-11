@@ -308,6 +308,7 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
 def get_agent_to_say(message: ApiUserMessage) -> Dict:
     """
     Utility function to that gets the agent to say a particular message.
+    Because prompt submitted to say contain all the needed context, we should always try the cache if its available.
     The inner function 'stream_generator' takes a text string not a streaming response.
     @return:
         visemes and audio data.
@@ -324,6 +325,9 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
+
+
+    
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
     TTS: AzureTextToSpeech = AzureTTSViseme(
         voice_id=yak.voice_id,
@@ -342,7 +346,6 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         stream_generator(message.user_input),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
-
 
 @app.get("/get_last_response/{session_id}")
 def get_last_response(session_id: str) -> Dict[str, str]:
@@ -458,7 +461,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                 pickle.loads(cached_data[b"audio"]),
             )
             for i in range(len(visemes)):
-                if yak.agent_status != YakStatus.TALKING: # Have been interrupted.
+                if yak.status!= YakStatus.TALKING: # Have been interrupted.
                     break
 
                 yield BlendShapesMultiPartResponse(
@@ -469,6 +472,8 @@ async def talk_with_avatar(message: ApiUserMessage):
             # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
             yak.agent.memory.add_run(Run(input=message.user_input, output=response.decode('ascii'))) #response is binary string due to teh way Redis stores data.
 
+        yak.agent_status = YakStatus.TALKING
+        
         return StreamingResponse(
             cached_stream_generator(cached_response),
             media_type="multipart/x-mixed-replace; boundary=frame",
@@ -486,7 +491,7 @@ async def talk_with_avatar(message: ApiUserMessage):
         def stream_generator(response) -> Tuple[Any, str]:
             full_text: List = []
             for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
-                
+
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE.
                     logger.info('Interrupted')
