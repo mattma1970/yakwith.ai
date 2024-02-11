@@ -68,7 +68,7 @@ class YakAgent:
     business_uid: str = field(default="default", kw_only=True)
     model_choice: ModelChoice = field(default=None) # User choice of model in settings.
 
-    model_driver_config: Optional[ModelDriverConfiguration] = field(default=None)
+    model_driver_config: Optional[ModelDriverConfiguration] = field(default=None) # Allow config to be injected.
 
     rule_names: Optional[Dict] = field(
         default=Factory(dict)
@@ -94,8 +94,9 @@ class YakAgent:
 
     def __attrs_post_init__(self):
         try:
-            if self.model_driver_config is None:
-                if ".yaml" not in self.model_choice.provider:
+            if self.model_driver_config is None and self.model_choice.model_driver_name!='':
+                # model driver config not injected and is spefied in the model_choice config.
+                if ".yaml" not in self.model_choice.model_driver_name:
                     self.model_choice.model_driver_name += ".yaml"
                 config_filename = os.path.join(
                     f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}",
@@ -140,14 +141,20 @@ class YakAgent:
             # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
             )
         elif self.model_choice.provider=="openai":
-            self.agent = Agent(
-                prompt_driver=OpenAiChatPromptDriver(
-                    model=self.model_choice.name, stream=self.stream
-                ),
-                logger_level=logging.ERROR,
-                rules=[Rule(rule) for rule in self.rules],
-                stream=self.stream,
-            )
+            try:
+                self.agent = Agent(
+                    prompt_driver=OpenAiChatPromptDriver(
+                        model=self.model_choice.name, stream=self.stream
+                    ),
+                    logger_level=logging.ERROR,
+                    rules=[Rule(rule) for rule in self.rules],
+                    stream=self.stream,
+                )
+            except Exception as e:
+                logger.error(f"""Failed to create Agent with model {self.model_choice.name} 
+                             for provider {self.model_choice.provider}. Please check model name, 
+                             provider in app user settings.:x"""
+                             )
         else:
             logger.error('ModelChoice provider is not recognised.')
         self.status = YakStatus.IDLE

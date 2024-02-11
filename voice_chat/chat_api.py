@@ -458,6 +458,9 @@ async def talk_with_avatar(message: ApiUserMessage):
                 pickle.loads(cached_data[b"audio"]),
             )
             for i in range(len(visemes)):
+                if yak.agent_status != YakStatus.TALKING: # Have been interrupted.
+                    break
+
                 yield BlendShapesMultiPartResponse(
                     json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
                 ).prepare()
@@ -483,6 +486,12 @@ async def talk_with_avatar(message: ApiUserMessage):
         def stream_generator(response) -> Tuple[Any, str]:
             full_text: List = []
             for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
+                
+                if yak.status != YakStatus.TALKING:
+                    # When being interupted, the agent_status is be forced to YakStatus.IDLE.
+                    logger.info('Interrupted')
+                    break
+
                 logger.debug(
                     f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
                 )
@@ -507,11 +516,6 @@ async def talk_with_avatar(message: ApiUserMessage):
                     f"TIMER: Yeilded audio chunk @ {datetime.now().timestamp()*1000}"
                 )
 
-                if yak.status != YakStatus.TALKING:
-                    # status can be changed by a call from client to the /interrupt_talking endpoint.
-                    logger.debug(f"Exit stream due to status changed externally.")
-                    break
-
             if yak.usingCache:
                 cache.hset(
                     cache_key, "response", ''.join(full_text)
@@ -533,7 +537,7 @@ def agent_interrupt(session_id: str):
     logger.info(f"Speech interupted: session_id {session_id}")
     yak: YakAgent = agent_registry[session_id]
     if yak:
-        yak.agent_status = YakStatus.IDLE
+        yak.status = YakStatus.IDLE
     return StdResponse(True, "OK", "Interrupted")
 
 
