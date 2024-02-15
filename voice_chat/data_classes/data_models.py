@@ -141,7 +141,7 @@ class ModelChoice:
     name: str = field(default="")
     config: List[Union[Dict]] = field(default_factory=list)
     provider: str = field(default="")
-    model_driver_name: Optional[str] = field(default="")
+    driver_file_name: Optional[str] = field(default="")
 
     @classmethod
     def from_dict(cls, data: Dict):
@@ -150,7 +150,7 @@ class ModelChoice:
             name = data.get("name",""),
             config = [_config for _config in data.get("config",[])],
             provider = data.get("provider",""),
-            model_driver_name = data.get("model_driver_name",""),
+            driver_file_name = data.get("driver_file_name",""),
         )
         return a
         

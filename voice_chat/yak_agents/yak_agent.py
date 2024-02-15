@@ -94,17 +94,21 @@ class YakAgent:
 
     def __attrs_post_init__(self):
         try:
-            if self.model_driver_config is None and self.model_choice.model_driver_name!='':
-                # model driver config not injected and is spefied in the model_choice config.
-                if ".yaml" not in self.model_choice.model_driver_name:
-                    self.model_choice.model_driver_name += ".yaml"
-                config_filename = os.path.join(
-                    f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}",
-                    self.model_choice.model_driver_name,
-                )
-                self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
-                    OmegaConf.load(config_filename)
-                )
+            if self.model_driver_config is None:
+                if self.model_choice.driver_file_name == '':
+
+                    logger.error('No model driver specified')
+                else:
+                    # model driver config not injected and is spefied in the model_choice config.
+                    if ".yaml" not in self.model_choice.driver_file_name:
+                        self.model_choice.driver_file_name += ".yaml"
+                    config_filename = os.path.join(
+                        f"{os.environ['APPLICATION_ROOT_FOLDER']}/{os.environ['MODEL_DRIVER_CONFIG_PATH']}",
+                        self.model_choice.driver_file_name,
+                    )
+                    self.model_driver_config = ModelDriverConfiguration.from_omega_conf(
+                        OmegaConf.load(config_filename)
+                    )
 
         except Exception as e:
             raise RuntimeError(f"Error loading agent related config file: {e}")
