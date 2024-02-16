@@ -11,7 +11,7 @@ import json
 
 class DataProxy:
     DATA_PROXIES_ROOT_FOLDER = (
-        "/home/mtman/Documents/Repos/yakwith.ai/voice_chat/data_proxies"
+        "/home/ubuntu/Repos/yakwith.ai/voice_chat/data_proxies"
     )
 
     @classmethod

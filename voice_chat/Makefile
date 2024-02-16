@@ -1,7 +1,7 @@
 .PHONY: run_tgi run_ocr run_api 
 
 MODE := quiet
-HOME := /home/mtman/Documents/Repos/yakwith.ai
+HOME := /home/ubuntu/Repos/yakwith.ai
 
 connect_mongo:
 	echo 'Connect to mongosh when mongo running in docker'
@@ -10,7 +10,7 @@ connect_mongo:
 
 run_tgi:
 	echo 'Starting Dockerized TGI on port 8080 for Mistal-7B-OpenOrca for locally hosted'
-	cd /home/mtman/Documents/Repos/yakwith.ai/voice_chat
+	cd /home/ubuntu/Repos/yakwith.ai/voice_chat
 	. ../.venv/bin/activate
 	docker run --rm --gpus all -p 8080:80 -v  $(HOME)models:/data \
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
@@ -19,7 +19,7 @@ run_tgi:
 
 run_tgi_zephyr:
 	echo 'Run TGI with local copy of zephyr 7B'
-	cd /home/mtman/Documents/Repos/yakwith.ai/voice_chat
+	cd /home/ubuntu/Repos/yakwith.ai/voice_chat
 	. ../.venv/bin/activate
 	docker run --rm --gpus all -p 8080:80 -v  $(HOME)/models:/data \
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
