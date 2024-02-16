@@ -68,7 +68,7 @@ SERVICE_AGENT_MODEL (name of model to use for AI-powered text editing e.g. 'gpt-
 Note: assembly.ai (STT) if required here as a temporary token for use on the front end needs to be generated.
 
 ### Running the dependant service
-Yakwith.ai backend uses TGG ( to serve models), tesseract server ( OCR) and mongoDB for persistant storage. Each of these services runs in docker.
+Yakwith.ai backend uses TGI ( to serve models), tesseract server ( OCR) and mongoDB for persistant storage. Each of these services runs in docker.
 See docker-compose.yml for details and to update for your local file structure. 
 ```
 docker-compose pull

@@ -1,0 +1,11 @@
+[tool.black]
+exclude='''
+/(
+    letsencrypt |
+letsencrypt/archive/* |
+db |
+redis |
+Images |
+images 
+)/
+'''

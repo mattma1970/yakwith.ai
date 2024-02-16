@@ -14,5 +14,5 @@ __all__ = [
     "DatabaseConfig",
     "ServiceHelper",
     "RedisHelper",
-    "ModelHelper"
+    "ModelHelper",
 ]

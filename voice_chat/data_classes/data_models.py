@@ -137,7 +137,8 @@ class Cafe:
 @dataclass(kw_only=True)
 class ModelChoice:
     """LLM model spec for model collection"""
-    id: str = field(default ="")
+
+    id: str = field(default="")
     name: str = field(default="")
     config: List[Union[Dict]] = field(default_factory=list)
     provider: str = field(default="")
@@ -146,19 +147,19 @@ class ModelChoice:
     @classmethod
     def from_dict(cls, data: Dict):
         a: ModelChoice = cls(
-            id = data["id"],
-            name = data.get("name",""),
-            config = [_config for _config in data.get("config",[])],
-            provider = data.get("provider",""),
-            driver_file_name = data.get("driver_file_name",""),
+            id=data["id"],
+            name=data.get("name", ""),
+            config=[_config for _config in data.get("config", [])],
+            provider=data.get("provider", ""),
+            driver_file_name=data.get("driver_file_name", ""),
         )
         return a
-        
+
     @classmethod
     def to_dict(self):
         return {
-                "id": self.id,
-                "name": self.name,
-                "config": self.config,
-                "provider": self.provider
-                }
+            "id": self.id,
+            "name": self.name,
+            "config": self.config,
+            "provider": self.provider,
+        }

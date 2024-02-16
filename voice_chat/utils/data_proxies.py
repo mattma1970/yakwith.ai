@@ -10,9 +10,7 @@ import json
 
 
 class DataProxy:
-    DATA_PROXIES_ROOT_FOLDER = (
-        "/home/ubuntu/Repos/yakwith.ai/voice_chat/data_proxies"
-    )
+    DATA_PROXIES_ROOT_FOLDER = "/home/ubuntu/Repos/yakwith.ai/voice_chat/data_proxies"
 
     @classmethod
     def get_all(

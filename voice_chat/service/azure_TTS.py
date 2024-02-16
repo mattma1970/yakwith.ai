@@ -13,7 +13,7 @@ from attrs import define, field, Factory
 from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
-from utils import TimerContextManager
+from utils import TimerContextManager, createIfMissing
 
 import re, json
 
@@ -42,9 +42,10 @@ class AzureTextToSpeech:
 
     def __attrs_post_init__(self):
         # tts sentence end mark used to find natural breaks for chunking data to send to TTS
-        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n"," "]
+        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n", " "]
 
-        self.tts_sentence_end_regex = [r'\.(?![0-9])',r'[!?,;:]']
+        self.tts_sentence_end_regex = [r"\.(?![0-9])", r"[!?,;:]"]
+
         self.blendshape_options = {
             "visemes_only": "redlips_front",
             "blendshapes": "FacialExpression",
@@ -59,17 +60,23 @@ class AzureTextToSpeech:
         )  # audio/mpeg
         speech_config.speech_synthesis_voice_name = self.voice_id
 
-        speech_config.set_property(
-            speechsdk.PropertyId.Speech_LogFilename,
-            f"{os.environ['APPLICATION_ROOT_FOLDER']}/voice_chat/logs/TTS/log.log",
-        )
+        # Log SDK output
+        if os.environ["AZURE_ENABLE_SPEECH_SDK_LOGGING"]:
+            log_path = (
+                f"{os.environ['APPLICATION_ROOT_FOLDER']}/voice_chat/logs/TTS/log.log"
+            )
+            createIfMissing(log_path)
+            speech_config.set_property(
+                speechsdk.PropertyId.Speech_LogFilename,
+                log_path,
+            )
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config, self.audio_config
         )  # TODO for testing only need to stream it back.
         self.full_message = ""
 
-        logger.debug(f"Creating Azure Speech Synthesizer. Config {speech_config}")
+        logger.debug(f"Created Azure Speech Synthesizer.")
 
     def escape_for_ssml(self, text: str):
         # Azure ssml doesn't need (or accept " and ' entiry replacements)
@@ -101,42 +108,53 @@ class AzureTextToSpeech:
 
         text_for_synth = ""
         text_for_accumulation = ""
-        is_first_sentance: bool = True  # first chunk of response yeilded needs to be optimised for speed.
+        is_first_sentance: bool = (
+            True  # first chunk of response yeilded needs to be optimised for speed.
+        )
 
         for chunk in text_stream:
-            text_for_synth += chunk.value # Acculate the text until a natural break in text is found. Then overwrite this. 
+            text_for_synth += (
+                chunk.value
+            )  # Acculate the text until a natural break in text is found. Then overwrite this.
             self.full_message += chunk.value  # For caching etc.
-            min_length = MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS if is_first_sentance is False else MIN_LENGTH_FOR_FIRST_SYNTHESIS
+            min_length = (
+                MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS
+                if is_first_sentance is False
+                else MIN_LENGTH_FOR_FIRST_SYNTHESIS
+            )
             if len(chunk.value) > 0 and len(text_for_synth) >= min_length:
-                last_match_index: int = -1                
+                last_match_index: int = -1
                 for sentence_marker in self.tts_sentence_end_regex:
                     if is_first_sentance:
                         # Find first occurence so we can get speech synth underway quickly
                         match = re.search(sentence_marker, text_for_synth)
                         if match:
                             last_match_index = match.start()
-                            is_first_sentance = False 
+                            is_first_sentance = False
                     else:
                         # Else be greedy with the text size.
                         for match in re.finditer(sentence_marker, text_for_synth):
                             # Get the last natural break position over all the sentance markers
-                            if match.start()> last_match_index:
+                            if match.start() > last_match_index:
                                 last_match_index = match.start()
-                
-                if last_match_index > 0:                
-                    sentance, remaining_text = text_for_synth[:last_match_index], text_for_synth[last_match_index:]
+
+                if last_match_index > 0:
+                    sentance, remaining_text = (
+                        text_for_synth[:last_match_index],
+                        text_for_synth[last_match_index:],
+                    )
                     if (
                         sentance.strip() != ""
                     ):  # if sentence only have \n or space, we could skip
                         if filter is not None:
-                            sentance = remove_problem_chars(
-                                sentance, filter
-                            )
+                            sentance = remove_problem_chars(sentance, filter)
                         if use_ssml:
                             sentance = self.escape_for_ssml(sentance)
                         logger.debug(f"Text for synth: {sentance}")
                         yield sentance
-                        text_for_synth = remaining_text.lstrip()  # Keep the remaining text 
+                        text_for_synth = (
+                            remaining_text.lstrip()
+                        )  # Keep the remaining text
                         last_match_index = -1
                         sentance = ""
 

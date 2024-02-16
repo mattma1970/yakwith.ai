@@ -170,4 +170,4 @@ voice_chat/Images/*
 voice_chat/logs/*
 # nginx-proxy-manager
 voice_chat/data/*
-letsencrypt/*
+voice_chat/letsencrypt/*
