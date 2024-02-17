@@ -49,7 +49,8 @@ from voice_chat.data_classes.mongodb_helper import (
     DatabaseConfig,
     ServicesHelper,
     DataHelper,
-    ModelChoice, ModelHelper
+    ModelChoice,
+    ModelHelper,
 )
 from voice_chat.data_classes.avatar_config import AvatarConfigParser
 from voice_chat.data_classes.redis_helper import RedisHelper
@@ -82,7 +83,12 @@ app = FastAPI()
     Deal with CORS issues of browser calling browser from different ports or names.
     https://fastapi.tiangolo.com/tutorial/cors/
 """
-origins = ["http://localhost", "http://localhost:3000", "https://app.yakwith.ai","https://dev.d2civivj65v1p0.amplifyapp.com"]
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "https://app.yakwith.ai",
+    "https://dev.d2civivj65v1p0.amplifyapp.com",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -180,7 +186,7 @@ def agent_create(config: SessionStart) -> Dict:
         menu: Menu = MenuHelper.get_one_menu(
             database, business_uid=config.business_uid, menu_id=config.menu_id
         )
-        model_choice: ModelChoice = ModelHelper.get_model_by_id(database,cafe.model)
+        model_choice: ModelChoice = ModelHelper.get_model_by_id(database, cafe.model)
 
         if menu is None:
             return {
@@ -215,7 +221,7 @@ def agent_create(config: SessionStart) -> Dict:
                 stream=config.stream,
                 voice_id=voice_id,
                 avatar_config=avatar_config,
-                model_choice = model_choice
+                model_choice=model_choice,
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -326,8 +332,6 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     yak: YakAgent = agent_registry[session_id]
 
-
-    
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
     TTS: AzureTextToSpeech = AzureTTSViseme(
         voice_id=yak.voice_id,
@@ -346,6 +350,7 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         stream_generator(message.user_input),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
+
 
 @app.get("/get_last_response/{session_id}")
 def get_last_response(session_id: str) -> Dict[str, str]:
@@ -415,7 +420,9 @@ async def talk_with_avatar(message: ApiUserMessage):
     Can be interrupted.
     """
     logger.info(f"Request spoken conversation for session_id: {message.session_id}")
-    logger.debug(f"User input: {message.user_input}")
+    logger.debug(
+        f"User input received: {message.user_input} @ {datetime.now().timestamp()*1000}"
+    )
 
     logger.debug(f"TIMER: Recieved text request @ {datetime.now().timestamp()*1000}")
 
@@ -461,7 +468,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                 pickle.loads(cached_data[b"audio"]),
             )
             for i in range(len(visemes)):
-                if yak.status!= YakStatus.TALKING: # Have been interrupted.
+                if yak.status != YakStatus.TALKING:  # Have been interrupted.
                     break
 
                 yield BlendShapesMultiPartResponse(
@@ -470,10 +477,12 @@ async def talk_with_avatar(message: ApiUserMessage):
 
             yak.status = YakStatus.IDLE
             # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
-            yak.agent.memory.add_run(Run(input=message.user_input, output=response.decode('ascii'))) #response is binary string due to teh way Redis stores data.
+            yak.agent.memory.add_run(
+                Run(input=message.user_input, output=response.decode("ascii"))
+            )  # response is binary string due to teh way Redis stores data.
 
         yak.agent_status = YakStatus.TALKING
-        
+
         return StreamingResponse(
             cached_stream_generator(cached_response),
             media_type="multipart/x-mixed-replace; boundary=frame",
@@ -494,7 +503,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE.
-                    logger.info('Interrupted')
+                    logger.info("Interrupted")
                     break
 
                 logger.debug(
@@ -523,7 +532,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
             if yak.usingCache:
                 cache.hset(
-                    cache_key, "response", ''.join(full_text)
+                    cache_key, "response", "".join(full_text)
                 )  # Add the full text of the response for usin in conversation memory.
 
             # After yeilding all the cached audio, set status to idle.
@@ -535,6 +544,7 @@ async def talk_with_avatar(message: ApiUserMessage):
             stream_generator(response),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
 
 @app.get("/agent/interrupt/{session_id}")
 def agent_interrupt(session_id: str):

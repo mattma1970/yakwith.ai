@@ -8,6 +8,7 @@
 """
 
 import os
+import math
 import azure.cognitiveservices.speech as speechsdk
 from attrs import define, field, Factory
 from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
@@ -17,7 +18,7 @@ from utils import TimerContextManager
 
 import re, json
 
-MIN_LENGTH_FOR_FIRST_SYNTHESIS = 50
+MIN_LENGTH_FOR_FIRST_SYNTHESIS = 20
 MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS = 150
 
 import logging
@@ -42,9 +43,10 @@ class AzureTextToSpeech:
 
     def __attrs_post_init__(self):
         # tts sentence end mark used to find natural breaks for chunking data to send to TTS
-        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n"," "]
+        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n", " "]
 
-        self.tts_sentence_end_regex = [r'\.(?![0-9])',r'[!?,;:]']
+        self.tts_sentence_end_regex = [r"\.(?![0-9])", r"[!?,;:]"]
+
         self.blendshape_options = {
             "visemes_only": "redlips_front",
             "blendshapes": "FacialExpression",
@@ -101,42 +103,62 @@ class AzureTextToSpeech:
 
         text_for_synth = ""
         text_for_accumulation = ""
-        is_first_sentance: bool = True  # first chunk of response yeilded needs to be optimised for speed.
+        is_first_sentance: bool = (
+            True  # first chunk of response yeilded needs to be optimised for speed.
+        )
 
         for chunk in text_stream:
-            text_for_synth += chunk.value # Acculate the text until a natural break in text is found. Then overwrite this. 
+            text_for_synth += (
+                chunk.value
+            )  # Acculate the text until a natural break in text is found. Then overwrite this.
             self.full_message += chunk.value  # For caching etc.
-            min_length = MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS if is_first_sentance is False else MIN_LENGTH_FOR_FIRST_SYNTHESIS
+            min_length = (
+                MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS
+                if is_first_sentance is False
+                else MIN_LENGTH_FOR_FIRST_SYNTHESIS
+            )
             if len(chunk.value) > 0 and len(text_for_synth) >= min_length:
-                last_match_index: int = -1                
-                for sentence_marker in self.tts_sentence_end_regex:
-                    if is_first_sentance:
-                        # Find first occurence so we can get speech synth underway quickly
+                last_match_index: int = -1
+                if is_first_sentance:
+                    text_for_synth = text_for_synth.lstrip()
+                    # Find first occurence so we can get speech synth underway quickly
+                    for sentence_marker in self.tts_sentence_end_regex:
                         match = re.search(sentence_marker, text_for_synth)
-                        if match:
+                        if match and match.start() > 0:
                             last_match_index = match.start()
-                            is_first_sentance = False 
-                    else:
+                            break
+
+                    if last_match_index < 0:
+                        start_idx = min(min_length, len(text_for_synth))
+                        match = re.search(r"\s(?=\S*$)", text_for_synth[:start_idx])
+                        last_match_index = match.start()
+
+                    is_first_sentance = False
+                else:
+                    for sentence_marker in self.tts_sentence_end_regex:
                         # Else be greedy with the text size.
                         for match in re.finditer(sentence_marker, text_for_synth):
                             # Get the last natural break position over all the sentance markers
-                            if match.start()> last_match_index:
+                            if match.start() > last_match_index:
                                 last_match_index = match.start()
-                
-                if last_match_index > 0:                
-                    sentance, remaining_text = text_for_synth[:last_match_index], text_for_synth[last_match_index:]
+
+                if last_match_index > 0:
+                    sentance, remaining_text = (
+                        text_for_synth[:last_match_index],
+                        text_for_synth[last_match_index:],
+                    )
                     if (
                         sentance.strip() != ""
                     ):  # if sentence only have \n or space, we could skip
                         if filter is not None:
-                            sentance = remove_problem_chars(
-                                sentance, filter
-                            )
+                            sentance = remove_problem_chars(sentance, filter)
                         if use_ssml:
                             sentance = self.escape_for_ssml(sentance)
                         logger.debug(f"Text for synth: {sentance}")
                         yield sentance
-                        text_for_synth = remaining_text.lstrip()  # Keep the remaining text 
+                        text_for_synth = (
+                            remaining_text.lstrip()
+                        )  # Keep the remaining text
                         last_match_index = -1
                         sentance = ""
 
@@ -288,6 +310,9 @@ class AzureTTSViseme(AzureTextToSpeech):
         ssml: str = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="en-US">
                             <voice name="{self.voice_id}">
                                 <mstts:viseme type="{ self.blendshape_options[self.blendshape_type]}"/>
+                                <mstts:silence  type="tailing-exact" value="0ms"/>
+                                <mstts:silence type="leading-exact" value="0ms"/>
+                                <mstts:silence type="sentenceboundart-exact" value="0ms"/>
                                  {text}
                         </voice>
                     </speak>"""
