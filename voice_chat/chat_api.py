@@ -85,8 +85,8 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "https://app.yakwith.ai",
-    "https://dev.d2civivj65v1p0.amplifyapp.com",
     "https://alpha.yakwith.ai",
+    "https://dev.d3hri1oylex0el.amplifyapp.com",
 ]
 
 app.add_middleware(

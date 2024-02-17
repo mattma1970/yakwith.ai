@@ -486,7 +486,7 @@ class MenuHelper:
             primary_menu_id: the menu_id of the menu in the collection that has sequence_numer == 0
         """
 
-        menus: List[Menu] = cls.get_menu_list(db, business_uid)
+        menus: List[Menu] = cls.get_menu_list(db, business_uid, for_display=False)
         if len(menus) == 0:
             return (
                 False,
