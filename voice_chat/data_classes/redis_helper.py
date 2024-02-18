@@ -2,6 +2,7 @@
 Helper and convenience functions for Redis cache.
 
 """
+
 import redis
 import logging
 import os
@@ -25,6 +26,19 @@ class RedisHelper:
             logger.error(
                 "Redis server is not running or could not be connected to.Please check."
             )
+
+    def get_cache_key(self, key_type: str, voice: str, text: str, id: str = ""):
+        """
+        Build cache keys. Standardize formating of keys.
+        @args:
+            key_type: str: ['res','req'] where res indicates is a responses from LLM, and req indicates is a prompt (request)
+            voice: voice ID for TTS
+            text: text string being cached
+            id: str: use case specific ID. e.g menu_id or leave blank to enable it to be used for every use case.
+        """
+        return (
+            f"{key_type.upper()}:{voice.upper()}:{id.upper()}:::{self.safe_key(text)}"
+        )
 
     def select_database(redis_client, db):
         """If the database is persisted and that database has db value other than 0, then you'll need to select the database manaully."""

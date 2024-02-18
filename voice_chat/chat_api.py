@@ -448,7 +448,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
     if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
-        cache_key = f"{yak.voice_id}:::{cache.safe_key(message.user_input)}"
+        cache_key = cache.get_cache_key("req", yak.voice_id, message.user_input)
         if has_pronouns(message.user_input) == False:
             cached_response = cache.hgetall(name=cache_key)
 
@@ -508,7 +508,18 @@ async def talk_with_avatar(message: ApiUserMessage):
                 logger.debug(
                     f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
                 )
-                stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
+                phrase_cache_key = cache.get_cache_key("res", yak.voice_id, phrase)
+                if len(phrase) <= TTS.MIN_LENGTH_FOR_FIRST_SYNTHESIS:
+                    cached_first_chunk = cache.hgetall(phrase_cache_key)
+                    if cached_first_chunk:
+                        response, blendshapes, visemes, audio = (
+                            cached_first_chunk[b"response"],
+                            pickle.loads(cached_first_chunk[b"blendshapes"]),
+                            pickle.loads(cached_first_chunk[b"visemes"]),
+                            pickle.loads(cached_first_chunk[b"audio"]),
+                        )
+                else:
+                    stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
 
                 yield BlendShapesMultiPartResponse(
                     json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
@@ -518,11 +529,23 @@ async def talk_with_avatar(message: ApiUserMessage):
                 # If using a cache then append the new data to the cache record holding all the chunks.
                 if yak.usingCache and cache is not None:
                     full_text.append(phrase)
-                    # Redis stores values as strings
+                    # Store list of chunks against full prompt
                     cache.append_to_cache(cache_key, "blendshapes", blendshapes)
                     cache.append_to_cache(cache_key, "visemes", visemes)
                     cache.append_to_cache(cache_key, "audio", stream.audio_data)
                     logger.debug(f"Add chunks to cache")
+                    # cache initial phrases under new keys
+                    if (
+                        len(phrase) <= TTS.MIN_LENGTH_FOR_FIRST_SYNTHESIS
+                    ):  # Used as proxy for it being a first chunk in a new response. Will have false positives but that's will not cause dowwnstream problems
+                        cache_response_key: str = cache.get_cache_key(
+                            "res", yak.voice_id, message.user_input
+                        )
+                        if cache.exists(cache_response_key) == False:
+                            cache.hset(cache_response_key, "response", phrase)
+                            cache.hset(cache_response_key, "blendshapes", blendshapes)
+                            cache.hset(cache_response_key, "visemes", visemes)
+                            cache.hset(cache_response_key, "audio", stream.audio_data)
 
                 logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
                 logger.debug(
