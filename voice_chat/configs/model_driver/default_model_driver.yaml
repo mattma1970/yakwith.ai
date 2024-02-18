@@ -1,7 +1,7 @@
 name: OpenOrcaLocal
 task: text_generation
 model: http://localhost:8080
-pretrained_tokenizer: /home/mtman/Documents/Repos/yakwith.ai/models/Mistral-7B-OpenOrca
+pretrained_tokenizer: /home/ubuntu/Repos/yakwith.ai/models/Mistral-7B-OpenOrca
 token: DUMMY
 timeout: null
 headers:

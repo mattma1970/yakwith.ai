@@ -14,7 +14,7 @@ from attrs import define, field, Factory
 from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
-from utils import TimerContextManager
+from utils import TimerContextManager, createIfMissing
 
 import re, json
 
@@ -61,17 +61,23 @@ class AzureTextToSpeech:
         )  # audio/mpeg
         speech_config.speech_synthesis_voice_name = self.voice_id
 
-        speech_config.set_property(
-            speechsdk.PropertyId.Speech_LogFilename,
-            f"{os.environ['APPLICATION_ROOT_FOLDER']}/voice_chat/logs/TTS/log.log",
-        )
+        # Log SDK output
+        if os.environ["AZURE_ENABLE_SPEECH_SDK_LOGGING"]:
+            log_path = (
+                f"{os.environ['APPLICATION_ROOT_FOLDER']}/voice_chat/logs/TTS/log.log"
+            )
+            createIfMissing(log_path)
+            speech_config.set_property(
+                speechsdk.PropertyId.Speech_LogFilename,
+                log_path,
+            )
 
         self.speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config, self.audio_config
         )  # TODO for testing only need to stream it back.
         self.full_message = ""
 
-        logger.debug(f"Creating Azure Speech Synthesizer. Config {speech_config}")
+        logger.debug(f"Created Azure Speech Synthesizer.")
 
     def escape_for_ssml(self, text: str):
         # Azure ssml doesn't need (or accept " and ' entiry replacements)

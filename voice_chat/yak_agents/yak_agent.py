@@ -66,9 +66,11 @@ class YakAgent:
     """
 
     business_uid: str = field(default="default", kw_only=True)
-    model_choice: ModelChoice = field(default=None) # User choice of model in settings.
+    model_choice: ModelChoice = field(default=None)  # User choice of model in settings.
 
-    model_driver_config: Optional[ModelDriverConfiguration] = field(default=None) # Allow config to be injected.
+    model_driver_config: Optional[ModelDriverConfiguration] = field(
+        default=None
+    )  # Allow config to be injected.
 
     rule_names: Optional[Dict] = field(
         default=Factory(dict)
@@ -95,9 +97,8 @@ class YakAgent:
     def __attrs_post_init__(self):
         try:
             if self.model_driver_config is None:
-                if self.model_choice.driver_file_name == '':
-
-                    logger.error('No model driver specified')
+                if self.model_choice.driver_file_name == "":
+                    logger.error("No model driver specified")
                 else:
                     # model driver config not injected and is spefied in the model_choice config.
                     if ".yaml" not in self.model_choice.driver_file_name:
@@ -126,25 +127,25 @@ class YakAgent:
         else:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
-        
+
         if self.model_choice.provider == "tgi.local":
             self.agent = Agent(
-            prompt_driver=HuggingFaceInferenceClientPromptDriver(
-                token=self.model_driver_config.token,
-                model=self.model_driver_config.model,
-                pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
-                params=self.model_driver_config.params,
-                task=self.model_driver_config.task,
-                stream=self.model_driver_config.stream,
-                stream_chunk_size=self.model_driver_config.stream_chunk_size,
-            ),
-            # event_listeners=self.streaming_event_listeners,
-            logger_level=logging.ERROR,
-            rules=[Rule(rule) for rule in self.rules],
-            stream=self.stream,
-            # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
+                prompt_driver=HuggingFaceInferenceClientPromptDriver(
+                    token=self.model_driver_config.token,
+                    model=self.model_driver_config.model,
+                    pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
+                    params=self.model_driver_config.params,
+                    task=self.model_driver_config.task,
+                    stream=self.model_driver_config.stream,
+                    stream_chunk_size=self.model_driver_config.stream_chunk_size,
+                ),
+                # event_listeners=self.streaming_event_listeners,
+                logger_level=logging.ERROR,
+                rules=[Rule(rule) for rule in self.rules],
+                stream=self.stream,
+                # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
             )
-        elif self.model_choice.provider=="openai":
+        elif self.model_choice.provider == "openai":
             try:
                 self.agent = Agent(
                     prompt_driver=OpenAiChatPromptDriver(
@@ -155,12 +156,13 @@ class YakAgent:
                     stream=self.stream,
                 )
             except Exception as e:
-                logger.error(f"""Failed to create Agent with model {self.model_choice.name} 
+                logger.error(
+                    f"""Failed to create Agent with model {self.model_choice.name} 
                              for provider {self.model_choice.provider}. Please check model name, 
                              provider in app user settings.:x"""
-                             )
+                )
         else:
-            logger.error('ModelChoice provider is not recognised.')
+            logger.error("ModelChoice provider is not recognised.")
         self.status = YakStatus.IDLE
 
     @property
@@ -178,7 +180,8 @@ class YakAgent:
     @property
     def usingCache(self) -> bool:
         """usecache is a setting in avatar settings json."""
-        return ('usecache' in self.avatar_config and self.avatar_config['usecache'])
+        return "usecache" in self.avatar_config and self.avatar_config["usecache"]
+
 
 if __name__ == "__main__":
     """yak = YakAgent(

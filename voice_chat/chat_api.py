@@ -51,16 +51,16 @@ from voice_chat.data_classes.mongodb_helper import (
     DataHelper,
     ModelChoice,
     ModelHelper,
+    ModelChoice,
+    ModelHelper,
 )
 from voice_chat.data_classes.avatar_config import AvatarConfigParser
 from voice_chat.data_classes.redis_helper import RedisHelper
 
 from bson import ObjectId
 
-from voice_chat.utils import DataProxy
+from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
 from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
-
-from voice_chat.utils import has_pronouns
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -500,7 +500,6 @@ async def talk_with_avatar(message: ApiUserMessage):
         def stream_generator(response) -> Tuple[Any, str]:
             full_text: List = []
             for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
-
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE.
                     logger.info("Interrupted")
@@ -911,7 +910,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_path",
         type=str,
-        default="/home/mtman/Documents/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
+        default="/home/ubuntu/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
     )
     args = parser.parse_args()
     load_dotenv()  # load all the environment variables
@@ -931,6 +930,8 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
 
     log_file_path = os.path.join(app_config.logging.root_folder, "session_logs.log")
+    createIfMissing(log_file_path)
+
     file_handler = RotatingFileHandler(
         log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
     )

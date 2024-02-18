@@ -168,3 +168,6 @@ key.pem
 voice_chat/db/*
 voice_chat/Images/*
 voice_chat/logs/*
+# nginx-proxy-manager
+voice_chat/data/*
+voice_chat/letsencrypt/*

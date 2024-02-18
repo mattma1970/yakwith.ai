@@ -10,13 +10,13 @@ database:
   data_collection: data # Collection containing miscellaneous data e.g. for populating dropdown, avatar configurations, model configs.
 
 assets:
-  image_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/Images   #Ensure this matches the folder mapped to the mongodb volume in .env
-  model_folder: /home/mtman/Documents/Repos/yakwith.ai/models   #Ensure this matches the folder mapped to the mongodb volume in .env
+  image_folder: /home/ubuntu/Repos/yakwith.ai/voice_chat/Images   #Ensure this matches the folder mapped to the mongodb volume in .env
+  model_folder: /home/ubuntu/Repos/yakwith.ai/models   #Ensure this matches the folder mapped to the mongodb volume in .env
   thumbnail_image_width: 400 # pixel height of thumbnail used for displaying in menu gallery.
   max_camera_resolution: 2048
 
 logging: 
-  root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs
+  root_folder: /home/ubuntu/Repos/yakwith.ai/voice_chat/logs
 
 ocr:
   url: http://localhost:8885/tesseract # Must ensure this matches the port specified in the environment variables used by docker-compose.
