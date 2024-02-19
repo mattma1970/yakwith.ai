@@ -56,6 +56,7 @@ from voice_chat.data_classes.mongodb_helper import (
 )
 from voice_chat.data_classes.avatar_config import AvatarConfigParser
 from voice_chat.data_classes.redis_helper import RedisHelper
+from voice_chat.utils.cache_utils import CacheUtils, QueryType
 
 from bson import ObjectId
 
@@ -331,25 +332,58 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
-    TTS: AzureTextToSpeech = AzureTTSViseme(
-        voice_id=yak.voice_id,
-        audio_config=None,
-        use_blendshapes=avatar_config.blendshapes,
-    )
 
-    def stream_generator(prompt):
-        stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
-        yield BlendShapesMultiPartResponse(
-            json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
-        ).prepare()
+    # See if text is in the cache
+    response, visemes, blendshapes, audio = "", [], [], ""
+    if (
+        yak.usingCache
+        and cache
+        and len(message.user_input)
+        <= int(int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"]))
+    ):
+        response, visemes, blendshapes, audio = CacheUtils.get_from_cache(
+            QueryType.RESPONSE, message.user_input, yak, cache
+        )
 
-    logger.debug(f"Sending streaming response, session_id {session_id}")
-    return StreamingResponse(
-        stream_generator(message.user_input),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
+    if response != "":
+
+        def cached_stream_generator(visemes, blendshapes, audio):
+            logger.debug("Yielding from cache")
+
+            for i in range(len(visemes)):
+                yield BlendShapesMultiPartResponse(
+                    json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
+                ).prepare()
+
+        return StreamingResponse(
+            cached_stream_generator(visemes, blendshapes, audio),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+    else:
+        # otherwise generate it
+        TTS: AzureTextToSpeech = AzureTTSViseme(
+            voice_id=yak.voice_id,
+            audio_config=None,
+            use_blendshapes=avatar_config.blendshapes,
+        )
+
+        def stream_generator(prompt):
+            stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+            yield BlendShapesMultiPartResponse(
+                json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+            ).prepare()
+            # Cache first utterances if cache is in use
+            if yak.usingCache and cache:
+                CacheUtils.cache_if_short_utterance(
+                    prompt, cache, yak, stream.audio_data, visemes, blendshapes
+                )
+
+        logger.debug(f"Sending streaming response, session_id {session_id}")
+        return StreamingResponse(
+            stream_generator(message.user_input),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
 
 
 @app.get("/get_last_response/{session_id}")
@@ -448,7 +482,9 @@ async def talk_with_avatar(message: ApiUserMessage):
 
     if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
-        cache_key = cache.get_cache_key("req", yak.voice_id, message.user_input)
+        cache_key = cache.get_cache_key(
+            QueryType.REQUEST, yak.voice_id, message.user_input
+        )
         if has_pronouns(message.user_input) == False:
             cached_response = cache.hgetall(name=cache_key)
 
@@ -499,30 +535,48 @@ async def talk_with_avatar(message: ApiUserMessage):
 
         def stream_generator(response) -> Tuple[Any, str]:
             full_text: List = []
+            yielded_from_cache: bool = False
+
             for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
                 if yak.status != YakStatus.TALKING:
-                    # When being interupted, the agent_status is be forced to YakStatus.IDLE.
+                    # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function
                     logger.info("Interrupted")
                     break
 
                 logger.debug(
                     f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
                 )
-                phrase_cache_key = cache.get_cache_key("res", yak.voice_id, phrase)
-                if len(phrase) <= TTS.MIN_LENGTH_FOR_FIRST_SYNTHESIS:
-                    cached_first_chunk = cache.hgetall(phrase_cache_key)
-                    if cached_first_chunk:
-                        response, blendshapes, visemes, audio = (
-                            cached_first_chunk[b"response"],
-                            pickle.loads(cached_first_chunk[b"blendshapes"]),
-                            pickle.loads(cached_first_chunk[b"visemes"]),
-                            pickle.loads(cached_first_chunk[b"audio"]),
+
+                # If this is a short phrase, check if its in the cache.
+                response: str = ""
+                blendshapes, visemes, audio_data = None, None, None
+                if (
+                    yak.usingCache
+                    and cache
+                    and len(phrase) <= int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"])
+                ):
+                    response, visemes, blendshapes, audio_data = (
+                        CacheUtils.get_from_cache(
+                            QueryType.RESPONSE, phrase, yak, cache
                         )
-                else:
+                    )
+                    # visemes/blendshape/audio_data are all stored as lists of chunks.
+                    # However, only a single chunk is acceptabled for short utterances so all others are drpped.
+                    # So they need to be uppacked.
+                    if audio_data and isinstance(audio_data, list):
+                        audio_data = audio_data[0]
+                        visemes = visemes[0]
+                        blendshapes = blendshapes[0]
+
+                if response == "":
                     stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
+                    audio_data = stream.audio_data  # a bytes like object.
+                    yielded_from_cache = False
+                else:
+                    yielded_from_cache = True
 
                 yield BlendShapesMultiPartResponse(
-                    json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+                    json.dumps(blendshapes), json.dumps(visemes), audio_data
                 ).prepare()
 
                 # Deal with caching of audio/visemes/blendshapes
@@ -532,20 +586,16 @@ async def talk_with_avatar(message: ApiUserMessage):
                     # Store list of chunks against full prompt
                     cache.append_to_cache(cache_key, "blendshapes", blendshapes)
                     cache.append_to_cache(cache_key, "visemes", visemes)
-                    cache.append_to_cache(cache_key, "audio", stream.audio_data)
+                    cache.append_to_cache(cache_key, "audio", audio_data)
                     logger.debug(f"Add chunks to cache")
-                    # cache initial phrases under new keys
-                    if (
-                        len(phrase) <= TTS.MIN_LENGTH_FOR_FIRST_SYNTHESIS
-                    ):  # Used as proxy for it being a first chunk in a new response. Will have false positives but that's will not cause dowwnstream problems
-                        cache_response_key: str = cache.get_cache_key(
-                            "res", yak.voice_id, message.user_input
+
+                    if not (yielded_from_cache):
+                        # If this was generated by the TTS, the cache it.
+                        # Used as proxy for it being a first chunk in a new response.
+                        # There will have false positives but that's will not cause dowwnstream problems
+                        CacheUtils.cache_if_short_utterance(
+                            phrase, cache, yak, audio_data, visemes, blendshapes
                         )
-                        if cache.exists(cache_response_key) == False:
-                            cache.hset(cache_response_key, "response", phrase)
-                            cache.hset(cache_response_key, "blendshapes", blendshapes)
-                            cache.hset(cache_response_key, "visemes", visemes)
-                            cache.hset(cache_response_key, "audio", stream.audio_data)
 
                 logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
                 logger.debug(
@@ -930,15 +980,15 @@ def cafe_get_setting_options(business_uid: str, table_name: str, columns: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="/home/ubuntu/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
-    )
-    args = parser.parse_args()
     load_dotenv()  # load all the environment variables
 
-    app_config = OmegaConf.load(args.config_path)
+    app_config = OmegaConf.load(
+        os.path.join(
+            os.environ["APPLICATION_ROOT_FOLDER"],
+            os.environ["API_CONFIG_PATH"],
+            "configs.yaml",
+        )
+    )
 
     # Instantiate a Mongo class that provides API for pymongo interaction with mongodb.
     database = DatabaseConfig(app_config)

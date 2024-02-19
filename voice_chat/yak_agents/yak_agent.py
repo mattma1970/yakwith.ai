@@ -133,7 +133,10 @@ class YakAgent:
                 prompt_driver=HuggingFaceInferenceClientPromptDriver(
                     token=self.model_driver_config.token,
                     model=self.model_driver_config.model,
-                    pretrained_tokenizer=self.model_driver_config.pretrained_tokenizer,
+                    pretrained_tokenizer=os.path.join(
+                        os.environ["APPLICATION_ROOT_FOLDER"],
+                        self.model_driver_config.pretrained_tokenizer,
+                    ),
                     params=self.model_driver_config.params,
                     task=self.model_driver_config.task,
                     stream=self.model_driver_config.stream,

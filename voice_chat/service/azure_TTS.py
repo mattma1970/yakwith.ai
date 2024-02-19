@@ -17,8 +17,6 @@ from voice_chat.utils.text_processing import remove_problem_chars
 from utils import TimerContextManager, createIfMissing
 
 import re, json
-
-
 import logging
 
 logger = logging.getLogger("YakChatAPI")
@@ -38,8 +36,6 @@ class AzureTextToSpeech:
     speech_synthesizer: speechsdk.SpeechSynthesizer = field(init=False)
     full_message: str = field(init=False)
     blendshape_options: dict = field(factory=dict)
-    MIN_LENGTH_FOR_FIRST_SYNTHESIS: int = field(default=20)
-    MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS: int = field(default=150)
 
     def __attrs_post_init__(self):
         # tts sentence end mark used to find natural breaks for chunking data to send to TTS
@@ -119,9 +115,9 @@ class AzureTextToSpeech:
             )  # Acculate the text until a natural break in text is found. Then overwrite this.
             self.full_message += chunk.value  # For caching etc.
             min_length = (
-                self.MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS
+                int(os.environ["MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS"])
                 if is_first_sentance is False
-                else self.MIN_LENGTH_FOR_FIRST_SYNTHESIS
+                else int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"])
             )
             if len(chunk.value) > 0 and len(text_for_synth) >= min_length:
                 last_match_index: int = -1
@@ -162,14 +158,16 @@ class AzureTextToSpeech:
         if text_for_synth != "":
             logger.debug(f"Text flushed for synth (not filtered):{text_for_synth}")
             if filter is not None:
-                yield remove_problem_chars(text_for_synth, filter)
-            else:
-                yield text_for_synth
+                text_for_synth = remove_problem_chars(text_for_synth, filter)
+            if use_ssml:
+                text_for_synth = self.escape_for_ssml(text_for_synth)
+
+            yield text_for_synth
 
     def get_first_utterance(self, text_for_synth: str, min_length: int):
         """Get a short sequence of words from text string. Used in latency optimization.
             Firstly, search of natural breaks in text. If none, then use the list of whole
-            words less than the min_length number of chars.
+            words less approximately within the minimum characters limit.
         @args:
             text_for_synth: str: an accumulator for the chunks of text returned.
             min_length: int: the minimum number of chars thats acceptable for the first chunk
@@ -179,6 +177,7 @@ class AzureTextToSpeech:
         """
 
         text_for_synth = text_for_synth.lstrip()
+        last_match_index = -1
 
         for sentence_marker in self.tts_sentence_end_regex:
             match = re.search(sentence_marker, text_for_synth)
@@ -187,8 +186,8 @@ class AzureTextToSpeech:
                 break
 
         if last_match_index < 0:
-            start_idx = min(min_length, len(text_for_synth))
-            match = re.search(r"\s(?=\S*$)", text_for_synth[:start_idx])
+            last_match_index = max(0, min(min_length, len(text_for_synth)) - 1)
+            match = re.search(r"\s(?=\S*$)", text_for_synth[:last_match_index])
             last_match_index = match.start()
         return text_for_synth, last_match_index
 
