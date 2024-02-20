@@ -56,7 +56,7 @@ from voice_chat.data_classes.mongodb_helper import (
 )
 from voice_chat.data_classes.avatar_config import AvatarConfigParser
 from voice_chat.data_classes.redis_helper import RedisHelper
-from voice_chat.utils.cache_utils import CacheUtils, QueryType
+from voice_chat.utils.cache_utils import CacheUtils, QueryType, TTSUtilities
 
 from bson import ObjectId
 
@@ -314,7 +314,7 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
 @app.post("/get_agent_to_say")
 def get_agent_to_say(message: ApiUserMessage) -> Dict:
     """
-    Utility function to that gets the agent to say a particular message.
+    Utility function to that gets the agent to say a short message. Not suitable for long messages as its not optimized for latency. TODO
     Because prompt submitted to say contain all the needed context, we should always try the cache if its available.
     The inner function 'stream_generator' takes a text string not a streaming response.
     @return:
@@ -336,12 +336,7 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     # See if text is in the cache
     response, visemes, blendshapes, audio = "", [], [], ""
-    if (
-        yak.usingCache
-        and cache
-        and len(message.user_input)
-        <= int(int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"]))
-    ):
+    if yak.usingCache and cache:
         response, visemes, blendshapes, audio = CacheUtils.get_from_cache(
             QueryType.RESPONSE, message.user_input, yak, cache
         )
@@ -376,7 +371,12 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
             # Cache first utterances if cache is in use
             if yak.usingCache and cache:
                 CacheUtils.cache_if_short_utterance(
-                    prompt, cache, yak, stream.audio_data, visemes, blendshapes
+                    prompt,
+                    cache,
+                    yak,
+                    stream.audio_data,
+                    visemes,
+                    blendshapes,
                 )
 
         logger.debug(f"Sending streaming response, session_id {session_id}")
@@ -478,7 +478,7 @@ async def talk_with_avatar(message: ApiUserMessage):
     # e.g Does the carrot cake contain nuts? vs. does it have nuts.
     # Short term solution is to filter out input text that contains pronouns such as it, they, its etc.
     cache_key: str = ""
-    cached_response: Dict = {}
+    cached_response: Dict = None
 
     if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
@@ -537,7 +537,9 @@ async def talk_with_avatar(message: ApiUserMessage):
             full_text: List = []
             yielded_from_cache: bool = False
 
-            for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
+            for phrase, overlap in TTS.text_preprocessor(
+                response, filter=None, use_ssml=True
+            ):
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function
                     logger.info("Interrupted")
@@ -547,14 +549,11 @@ async def talk_with_avatar(message: ApiUserMessage):
                     f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
                 )
 
-                # If this is a short phrase, check if its in the cache.
                 response: str = ""
                 blendshapes, visemes, audio_data = None, None, None
-                if (
-                    yak.usingCache
-                    and cache
-                    and len(phrase) <= int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"])
-                ):
+
+                # always check the cache
+                if yak.usingCache and cache:
                     response, visemes, blendshapes, audio_data = (
                         CacheUtils.get_from_cache(
                             QueryType.RESPONSE, phrase, yak, cache
@@ -569,8 +568,24 @@ async def talk_with_avatar(message: ApiUserMessage):
                         blendshapes = blendshapes[0]
 
                 if response == "":
-                    stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
-                    audio_data = stream.audio_data  # a bytes like object.
+                    stream, visemes, blendshapes = TTS.audio_viseme_generator(
+                        phrase + overlap
+                    )
+                    audio_data = (
+                        stream.audio_data
+                    )  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
+                    if overlap != "":
+                        # overlap only has a non-empty value if we've added extra words to fix intonation problems. This should be dropped.
+                        # boundary of words to be dropped from audio. Note that phrase is never modified with addtional words.
+                        try:
+                            truncated_duration_ms = TTS.wordboundary_log[
+                                -(os.environ["WORD_COUNT_OVERLAP_FOR_FIRST_SYNTHESIS"])
+                            ]
+                            audio_data = TTSUtilities.truncate_audio_byte_data(
+                                audio_data, truncated_duration_ms
+                            )
+                        except Exception as e:
+                            logger.error(f"Error truncating audio: {e} ")
                     yielded_from_cache = False
                 else:
                     yielded_from_cache = True
@@ -579,8 +594,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     json.dumps(blendshapes), json.dumps(visemes), audio_data
                 ).prepare()
 
-                # Deal with caching of audio/visemes/blendshapes
-                # If using a cache then append the new data to the cache record holding all the chunks.
+                # Caching of audio/visemes/blendshapes
                 if yak.usingCache and cache is not None:
                     full_text.append(phrase)
                     # Store list of chunks against full prompt
@@ -590,16 +604,14 @@ async def talk_with_avatar(message: ApiUserMessage):
                     logger.debug(f"Add chunks to cache")
 
                     if not (yielded_from_cache):
-                        # If this was generated by the TTS, the cache it.
-                        # Used as proxy for it being a first chunk in a new response.
-                        # There will have false positives but that's will not cause dowwnstream problems
+                        # If this was generated by the TTS and its short, then cache it for latency reduction.
+                        # This duplicates the value in the cache, but short phrases are rare in natural language.
                         CacheUtils.cache_if_short_utterance(
                             phrase, cache, yak, audio_data, visemes, blendshapes
                         )
 
-                logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
                 logger.debug(
-                    f"TIMER: Yeilded audio chunk @ {datetime.now().timestamp()*1000}"
+                    f"YEILDED:(B,V):: {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
                 )
 
             if yak.usingCache:

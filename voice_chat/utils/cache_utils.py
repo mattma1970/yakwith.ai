@@ -1,8 +1,12 @@
-import pickle, os
+import pickle, os, re
 from voice_chat.data_classes.cache import CacheHelper, QueryType
+from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.yak_agents import YakAgent
 from typing import Any, List, Dict
 from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CacheUtils:
@@ -15,13 +19,13 @@ class CacheUtils:
         prompt: str,
         cache: CacheHelper,
         yak_agent: YakAgent,
-        audio_data: str,
+        audio_data: bytes,
         visemes: List[Dict],
         blendshapes: List = [],
-    ):
+    ) -> None:
         """
         Cache short text chunks. Used for latency optimization.
-        These utterances are not related to the request or the conversation context so
+        They short chunks are the output of the TTS so do not have to be 'pronoun-aware' as do the input prompts.
         @args:
             prompt: the text from which the first utterance is pulled.
             cache: the cache. e.g redis.
@@ -30,16 +34,16 @@ class CacheUtils:
             audio_data, visemes, blendshapes: string representatiosn of the relevant data.
         """
         phrase: str = ""
+        prompt_array = re.split(r"\s+", prompt.lstrip())
+
+        # We can only cache the data if the prompt is a completed stream.
+        #    It must be a completed stream or otherwise the viseme and (optional) blendshape data won't be available.
+
         if (
-            len(prompt) <= int(os.environ["MIN_LENGTH_FOR_FIRST_SYNTHESIS"])
-            and audio_data
-            and visemes
+            len(prompt_array) > int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
+            or audio_data == b""
+            or len(visemes) == 0
         ):
-            """We can only cache the data if the prompt is a completed stream.
-            It must be a completed stream or otherwise the viseme and (optional) blendshape data won't be available.
-            """
-            phrase = prompt
-        else:
             return
 
         cache_response_key: str = cache.get_cache_key(
@@ -59,15 +63,16 @@ class CacheUtils:
         yak: YakAgent,
         cache: CacheHelper,
         *,
-        id: str = ""
+        id: str = "",
     ):
         """
         Hit the cache.
-        @args: type: str : ["res","req"] response or request.
+        @args:
+            type: str : ["res","req"] response or request.
+            id: str: optional tag used to identify the audio. For example a MenuID for the menu from which the response is taken.
         @returns:
             response: str: default ""
-            other: str|list|None.
-
+            visemes, blendshapes, audio from cache.
         """
         response, visemes, blendshapes, audio = "", None, None, None
         phrase_cache_key = cache.get_cache_key(type, yak.voice_id, phrase, id)
