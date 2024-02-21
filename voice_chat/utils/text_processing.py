@@ -2,7 +2,6 @@
 Misc utility functions. mattma1970@gmail
 """
 
-
 import streamlit as st
 from typing import List
 import base64
@@ -34,7 +33,7 @@ def endpoint(root_url: str, func: str):
 
 
 def remove_problem_chars(
-    text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. \s'?!]"
+    text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. \s'?!;:]"
 ):
     """
     Remove chars from text. Used in pre-processing text input to STT.
@@ -42,6 +41,9 @@ def remove_problem_chars(
         text: text to be filtered
         accpetable_chars_pattern: str: a valid regex pattern for acceptable characters. All other will be filtered.
     """
+    if acceptable_chars_pattern is None or acceptable_chars_pattern == "":
+        return text
+
     pattern = re.compile(acceptable_chars_pattern)
     ret = text
     try:

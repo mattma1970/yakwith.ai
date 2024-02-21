@@ -17,7 +17,10 @@ class TTSUtilities:
 
     @classmethod
     def get_sentance_break_regex(cls):
-        return [r"\.(?![0-9\s])", r"[!?,;:]"]
+        return [r"\.(?![0-9])", r"[!?,;:]"]
+
+    def get_sentance_end_regex(cls):
+        return [r"\.(?![0-9])", r"[!?;:]"]
 
     @classmethod
     def total_samples(cls, timestamp_in_ms: int, sample_rate: int = 16000):
@@ -72,7 +75,10 @@ class TTSUtilities:
 
     @classmethod
     def get_first_utterance(
-        cls, text_for_synth: str, phrase_length: int = 3, overlap_length: int = 0
+        cls,
+        text_for_synth: str,
+        phrase_length: int = 3,
+        overlap_length: int = 0,
     ) -> Tuple[str, str, str]:
         """
             Get segments of text_for_synth for speech generation and short_utterance caching.
@@ -84,7 +90,6 @@ class TTSUtilities:
         @returns:
             Tuple[str,str,str]: first phrase, next overlap_length words following the first_phrase, all words following the first_phrase
         """
-
         words_for_synth = re.split(r"\s+", text_for_synth.lstrip())
 
         if len(words_for_synth) < phrase_length:

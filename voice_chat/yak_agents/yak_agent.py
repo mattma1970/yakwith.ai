@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Callable
+from typing import List, Optional, Union, Dict, Callable, Any
 from dotenv import load_dotenv
 from attrs import define, field, Factory, validators
 from queue import Queue
@@ -23,6 +23,7 @@ from omegaconf import OmegaConf
 
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 from voice_chat.data_classes.mongodb_helper import ModelHelper, ModelChoice
+from voice_chat.service.TTS import TextToSpeechClass
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,10 @@ class YakAgent:
     avatar_config: Dict = field(
         default=Factory(dict)
     )  # Primarily for avatar animations including blendshapes.
+
+    TextToSpeech: TextToSpeechClass = field(
+        default=None
+    )  # Object dealing with speech synthesis, visemes and blendshapes.
 
     def __attrs_post_init__(self):
         try:

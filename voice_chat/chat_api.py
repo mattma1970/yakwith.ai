@@ -62,6 +62,7 @@ from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
 from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+from voice_chat.service.TTS import TextToSpeechClass
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -357,11 +358,16 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
     else:
         # otherwise generate it
-        TTS: AzureTextToSpeech = AzureTTSViseme(
-            voice_id=yak.voice_id,
-            audio_config=None,
-            use_blendshapes=avatar_config.blendshapes,
-        )
+        TTS: TextToSpeechClass = None
+        if yak.TextToSpeech:
+            TTS = yak.TextToSpeech
+        else:
+            TTS = AzureTTSViseme(
+                voice_id=yak.voice_id,
+                audio_config=None,
+                use_blendshapes=avatar_config.blendshapes,
+            )
+            yak.TextToSpeech = TTS
 
         def stream_generator(prompt):
             stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
@@ -432,8 +438,10 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     response = Stream(yak.agent).run(message.user_input)  # Streaming response.
     yak.agent_status = YakStatus.TALKING
 
-    def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter=None):
+    def stream_generator(response) -> Generator[Any, str, Any]:
+        for phrase in TTS.text_preprocessor(
+            response, filter=TTS.permitted_character_regex
+        ):
             stream = TTS.audio_stream_generator(phrase)
             yield MultiPartResponse(json.dumps(phrase), stream.audio_data).prepare()
             if yak.status != YakStatus.TALKING:
@@ -526,11 +534,18 @@ async def talk_with_avatar(message: ApiUserMessage):
 
     else:
         # Use the LLM to get the response back.
-        TTS: AzureTextToSpeech = AzureTTSViseme(
-            voice_id=yak.voice_id,
-            audio_config=None,
-            use_blendshapes=avatar_config.blendshapes,
-        )
+
+        TTS: TextToSpeechClass = None
+
+        if yak.TextToSpeech:
+            TTS = yak.TextToSpeech
+        else:
+            TTS = AzureTTSViseme(
+                voice_id=yak.voice_id,
+                audio_config=None,
+                use_blendshapes=avatar_config.blendshapes,
+            )
+            yak.TextToSpeech = TTS
 
         response = Stream(yak.agent).run(message.user_input)
 
@@ -539,7 +554,7 @@ async def talk_with_avatar(message: ApiUserMessage):
             yielded_from_cache: bool = False
 
             for phrase, overlap in TTS.text_preprocessor(
-                response, filter=None, use_ssml=True
+                response, filter=TTS.permitted_character_regex, use_ssml=True
             ):
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function

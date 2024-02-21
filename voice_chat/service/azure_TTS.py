@@ -15,6 +15,8 @@ from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
 from voice_chat.utils.tts_utilites import TTSUtilities
+from voice_chat.service.TTS import TextToSpeechClass
+
 from utils import TimerContextManager, createIfMissing
 
 import re, json
@@ -24,7 +26,7 @@ logger = logging.getLogger("YakChatAPI")
 
 
 @define
-class AzureTextToSpeech:
+class AzureTextToSpeech(TextToSpeechClass):
     voice_id: str = field(
         default="en-AU-KimNeural", kw_only=False
     )  # Ensure this is a valid voice id from you TTS provider
@@ -36,6 +38,7 @@ class AzureTextToSpeech:
     speech_synthesizer: speechsdk.SpeechSynthesizer = field(init=False)
     full_message: str = field(init=False)
     blendshape_options: dict = field(factory=dict)
+    permitted_character_regex: str = "[^a-zA-Z0-9,. \s'?!;:\$]"  # Azure specific.
 
     def __attrs_post_init__(self):
 
@@ -98,9 +101,9 @@ class AzureTextToSpeech:
         )
 
         for chunk in text_stream:
-            # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
-            text_accumulator += chunk.value
-            self.full_message += chunk.value  # For caching etc.
+            phrase: str = remove_problem_chars(chunk.value, filter)
+            text_accumulator += phrase  # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
+            self.full_message += phrase  # For caching etc.
 
             min_length = (
                 int(os.environ["MAX_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"])
@@ -134,6 +137,9 @@ class AzureTextToSpeech:
                             "",
                             text_accumulator[phrase_end_index:],
                         )
+                    # If the phrase index hasn't moved then continue collecting text chunks.
+                    if phrase_end_index == min_length:
+                        continue
 
                 if (
                     phrase.strip() != ""
