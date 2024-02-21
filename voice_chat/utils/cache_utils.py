@@ -33,7 +33,6 @@ class CacheUtils:
             TTS: The text to speech object.
             audio_data, visemes, blendshapes: string representatiosn of the relevant data.
         """
-        phrase: str = ""
         prompt_array = re.split(r"\s+", prompt.lstrip())
 
         # We can only cache the data if the prompt is a completed stream.
@@ -47,10 +46,10 @@ class CacheUtils:
             return
 
         cache_response_key: str = cache.get_cache_key(
-            QueryType.RESPONSE, yak_agent.voice_id, phrase
+            QueryType.RESPONSE, yak_agent.voice_id, prompt
         )
         if cache.exists(cache_response_key) == False:
-            cache.hset(cache_response_key, "response", phrase)
+            cache.hset(cache_response_key, "response", prompt)
             cache.append_to_cache(cache_response_key, "blendshapes", blendshapes)
             cache.append_to_cache(cache_response_key, "visemes", visemes)
             cache.append_to_cache(cache_response_key, "audio", audio_data)

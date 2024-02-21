@@ -115,13 +115,15 @@ class AzureTextToSpeech:
                 if is_first_sentance:
                     phrase, overlap, remainder = TTSUtilities.get_first_utterance(
                         text_accumulator,
-                        int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]),
-                        int(os.environ["WORD_COUNT_OVERLAP_FOR_FIRST_SYNTHESIS"]),
+                        phrase_length=int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]),
+                        overlap_length=int(
+                            os.environ["WORD_COUNT_OVERLAP_FOR_FIRST_SYNTHESIS"]
+                        ),
                     )
                     is_first_sentance = False
                 else:
                     phrase_end_index: int = min_length
-                    for sentence_marker in self.tts_sentence_end_regex:
+                    for sentence_marker in TTSUtilities.get_sentance_break_regex():
                         # Else be greedy with the text size.
                         for match in re.finditer(sentence_marker, text_accumulator):
                             # Get the last natural break position over all the sentance markers
@@ -136,7 +138,7 @@ class AzureTextToSpeech:
                 if (
                     phrase.strip() != ""
                 ):  # if sentence only have \n or space, we could skip
-                    preprocessed_phrase = self.prepare_for_synthesis(
+                    preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
                         filter, use_ssml, phrase
                     )
                     yield preprocessed_phrase, overlap
@@ -144,7 +146,7 @@ class AzureTextToSpeech:
 
         if text_accumulator != "":
             logger.debug(f"Text for synth flushed:{text_accumulator}")
-            preprocessed_phrase = self.prepare_for_synthesis(
+            preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
                 filter, use_ssml, text_accumulator
             )
             yield preprocessed_phrase, ""
@@ -260,11 +262,14 @@ class AzureTTSViseme(AzureTextToSpeech):
 
         return _viseme_logger
 
-    def audio_viseme_generator(self, text: str):
+    def audio_viseme_generator(self, text: str, overlap: str = ""):
         """
         Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events.
         Note: visemes and blendshapes generated asyn via the viseme_cb callback invokations and pushed to the respective logs.
         """
+        if overlap != "":
+            text = text + " " + overlap
+
         self.clear_wordboundary_log()  # Reset wb log before evary chunk is generated.
         with TimerContextManager(f"SpeechSynth:{text}", logger, logging.DEBUG) as timer:
             audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(

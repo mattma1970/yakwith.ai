@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 class TTSUtilities:
 
     @classmethod
+    def get_sentance_break_regex(cls):
+        return [r"\.(?![0-9\s])", r"[!?,;:]"]
+
+    @classmethod
     def total_samples(cls, timestamp_in_ms: int, sample_rate: int = 16000):
         return math.floor(timestamp_in_ms / 1000 * sample_rate)
 
@@ -40,6 +44,7 @@ class TTSUtilities:
         if not (isinstance(audio_bytes, bytes)):
             logger.error("Non-byte data passed for truncating.")
         else:
+            logger.debug(f"Turncation audio to {segment_duration} ms")
             if format.strip().lower() == "mp3":
                 mp3_file_like = io.BytesIO(audio_bytes)
                 decompressed_audio = AudioSegment.from_mp3(mp3_file_like)
@@ -80,8 +85,6 @@ class TTSUtilities:
             Tuple[str,str,str]: first phrase, next overlap_length words following the first_phrase, all words following the first_phrase
         """
 
-        sentance_break_regex = [r"\.(?![0-9])", r"[!?,;:]"]
-
         words_for_synth = re.split(r"\s+", text_for_synth.lstrip())
 
         if len(words_for_synth) < phrase_length:
@@ -89,10 +92,14 @@ class TTSUtilities:
 
         phrase = " ".join(words_for_synth[:phrase_length])
 
-        for break_marker in sentance_break_regex:  # non-space sentance breaks
+        for break_marker in cls.get_sentance_break_regex():  # non-space sentance breaks
             match = re.search(break_marker, phrase)
             if match and match.start() > 0:
-                return phrase[: match.start()], "", phrase[match.start() :]
+                return (
+                    phrase[: match.start() + 1],
+                    "",
+                    phrase[match.start() + 1 :],
+                )  # include the punctuation mark
 
         # If we made it here then there isn't natural pause so we'll return the _phrase plus the next overlap_length words.
         if len(words_for_synth) > phrase_length:

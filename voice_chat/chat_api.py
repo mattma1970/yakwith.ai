@@ -16,7 +16,7 @@ from PIL import Image
 import io
 
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Any, Iterator, Tuple
+from typing import List, Optional, Union, Dict, Any, Iterator, Tuple, Generator
 from dotenv import load_dotenv
 from uuid import uuid4
 from attr import define, field, Factory
@@ -523,6 +523,7 @@ async def talk_with_avatar(message: ApiUserMessage):
             cached_stream_generator(cached_response),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
     else:
         # Use the LLM to get the response back.
         TTS: AzureTextToSpeech = AzureTTSViseme(
@@ -533,7 +534,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
         response = Stream(yak.agent).run(message.user_input)
 
-        def stream_generator(response) -> Tuple[Any, str]:
+        def stream_generator(response) -> Generator[str, str, bytes]:
             full_text: List = []
             yielded_from_cache: bool = False
 
@@ -546,13 +547,19 @@ async def talk_with_avatar(message: ApiUserMessage):
                     break
 
                 logger.debug(
-                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
+                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} {overlap}"
                 )
 
                 response: str = ""
-                blendshapes, visemes, audio_data = None, None, None
+                blendshapes: List = None
+                visemes: List = None
+                audio_data: bytes = (
+                    None  # Possibly compressed, depending on speech synth config
+                )
 
-                # always check the cache
+                # Check in the cache for first utterance.
+                # Note: cached QueryType.Responses are only use for latency reduction and so only short utterances are cached, utterances
+                #       that are at most one text chunk long.
                 if yak.usingCache and cache:
                     response, visemes, blendshapes, audio_data = (
                         CacheUtils.get_from_cache(
@@ -561,15 +568,16 @@ async def talk_with_avatar(message: ApiUserMessage):
                     )
                     # visemes/blendshape/audio_data are all stored as lists of chunks.
                     # However, only a single chunk is acceptabled for short utterances so all others are drpped.
-                    # So they need to be uppacked.
                     if audio_data and isinstance(audio_data, list):
                         audio_data = audio_data[0]
                         visemes = visemes[0]
                         blendshapes = blendshapes[0]
 
+                        logger.debug(f"Yeild first utterance from cache:{response}")
+
                 if response == "":
                     stream, visemes, blendshapes = TTS.audio_viseme_generator(
-                        phrase + overlap
+                        phrase, overlap
                     )
                     audio_data = (
                         stream.audio_data
@@ -579,7 +587,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                         # boundary of words to be dropped from audio. Note that phrase is never modified with addtional words.
                         try:
                             truncated_duration_ms = TTS.wordboundary_log[
-                                -(os.environ["WORD_COUNT_OVERLAP_FOR_FIRST_SYNTHESIS"])
+                                int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
                             ]
                             audio_data = TTSUtilities.truncate_audio_byte_data(
                                 audio_data, truncated_duration_ms
