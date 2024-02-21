@@ -54,7 +54,7 @@ def remove_problem_chars(
 
 
 def has_pronouns(text: str, additional_words: List[str] = []) -> bool:
-    pronouns: List[str] = ["its", "it's", "they"]
+    pronouns: List[str] = ["it", "its", "it's", "they"]
     pronouns.extend(additional_words)
     pronouns_check = [
         bool(re.search(r"\b" + re.escape(pronoun) + r"\b", text))
