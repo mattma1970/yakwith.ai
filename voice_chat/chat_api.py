@@ -137,16 +137,28 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
         "Content-Type": "application/json",
         "Authorization": service_config["api_token"],
     }
+    data: str = ""
+    if "data" in service_config:
+        data = json.dumps(
+            service_config["data"]
+        )  # If data present, it always takes precidence
+    else:
+        data = json.dumps({"expires_in": service_config["duration"]})
+
     r = requests.post(
         url=service_config["api_endpoint"],
         headers=headers,
-        data=json.dumps({"expires_in": service_config["duration"]}),
+        data=data,
     )
 
     if r.status_code == 200:
         logger.info("OK: Got temp STT token.")
         response = r.json()
-        temp_token = response["token"]
+        temp_token = response[service_config["token_key_name"]]
+    else:
+        logger.error(
+            f"Failed to get temp service token for {req.service_name}: Err code {r.status_code}: {r.text}"
+        )
 
     return {"temp_token": temp_token}
 
