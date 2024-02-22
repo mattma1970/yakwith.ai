@@ -11,7 +11,7 @@
       "name": "deepgram_temp_token",
       "api_token": "Token 3c43dffa972ab8df39b0b88253773ed6fb481de6",
       "api_endpoint" : "https://api.deepgram.com/v1/projects/d625bbca-bcee-45f6-b754-d23dc1dc47df/keys",
-      "data": {"comment":"TempToken", "scopes":["usage:write"],"tags":["testing"],"time_to_live_in_seconds":60},
+      "data": {"comment":"TempToken", "scopes":["usage:write"],"tags":["testing"],"time_to_live_in_seconds":3600},
       "token_key_name":"key"
     }
   ]

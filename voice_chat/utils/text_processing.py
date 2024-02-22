@@ -48,6 +48,7 @@ def remove_problem_chars(
     ret = text
     try:
         ret = pattern.sub(lambda match: "", text)
+        ret = re.sub(r"\s+", " ", ret)
     except Exception as e:
         logger.error(e)
     return ret

@@ -243,7 +243,9 @@ class MultiPartResponse:
 
     json_data: str
     audio_bytes: bytes
-    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+    boundary: str = (
+        "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+    )
 
     def prepare(self) -> str:
         """
@@ -259,7 +261,9 @@ class BlendShapesMultiPartResponse:
     blendshapes: str
     json_data: str
     audio_bytes: bytes
-    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+    boundary: str = (
+        "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
+    )
 
     def prepare(self) -> str:
         """

@@ -625,6 +625,10 @@ async def talk_with_avatar(message: ApiUserMessage):
                 else:
                     yielded_from_cache = True
 
+                logger.debug(
+                    f"YEILDED:(B,V):: {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
+                )
+
                 yield BlendShapesMultiPartResponse(
                     json.dumps(blendshapes), json.dumps(visemes), audio_data
                 ).prepare()
@@ -644,10 +648,6 @@ async def talk_with_avatar(message: ApiUserMessage):
                         CacheUtils.cache_if_short_utterance(
                             phrase, cache, yak, audio_data, visemes, blendshapes
                         )
-
-                logger.debug(
-                    f"YEILDED:(B,V):: {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
-                )
 
             if yak.usingCache:
                 cache.hset(

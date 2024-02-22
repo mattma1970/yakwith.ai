@@ -105,17 +105,12 @@ class AzureTextToSpeech(TextToSpeechClass):
             text_accumulator += phrase  # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
             self.full_message += phrase  # For caching etc.
 
-            min_length = (
-                int(os.environ["MAX_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"])
-                if is_first_sentance is False
-                else int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
-                * 10  # TODO hack. remove
-            )
-            if len(chunk.value) > 0 and len(text_accumulator) >= min_length:
+            phrase, overlap, remainder = "", "", ""
 
-                phrase, overlap, remainder = "", "", ""
-
-                if is_first_sentance:
+            if is_first_sentance:
+                if text_accumulator.strip().count(" ") > int(
+                    os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]
+                ):
                     phrase, overlap, remainder = TTSUtilities.get_first_utterance(
                         text_accumulator,
                         phrase_length=int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]),
@@ -124,31 +119,38 @@ class AzureTextToSpeech(TextToSpeechClass):
                         ),
                     )
                     is_first_sentance = False
-                else:
-                    phrase_end_index: int = min_length
-                    for sentence_marker in TTSUtilities.get_sentance_break_regex():
-                        # Else be greedy with the text size.
-                        for match in re.finditer(sentence_marker, text_accumulator):
-                            # Get the last natural break position over all the sentance markers
-                            if match.start() > phrase_end_index:
-                                phrase_end_index = match.start()
-                        phrase, overlap, remainder = (
-                            text_accumulator[:phrase_end_index],
-                            "",
-                            text_accumulator[phrase_end_index:],
-                        )
-                    # If the phrase index hasn't moved then continue collecting text chunks.
-                    if phrase_end_index == min_length:
-                        continue
+            else:
+                # Else be greedy with the text size.
+                phrase_end_index: int = int(
+                    os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
+                )
+                if len(text_accumulator) < phrase_end_index:
+                    continue
+                # Else be greedy with the text size.
+                for sentence_break_regex in TTSUtilities.get_sentance_break_regex():
+                    for match in re.finditer(sentence_break_regex, text_accumulator):
+                        # Get the last natural break position over all the sentance markers
+                        if match and match.start() > phrase_end_index:
+                            phrase_end_index = match.start()
 
+                phrase, overlap, remainder = (
+                    text_accumulator[:phrase_end_index],
+                    "",
+                    text_accumulator[phrase_end_index:],
+                )
+                # If the phrase index hasn't moved then continue collecting text chunks.
                 if (
-                    phrase.strip() != ""
-                ):  # if sentence only have \n or space, we could skip
-                    preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
-                        filter, use_ssml, phrase
-                    )
-                    yield preprocessed_phrase, overlap
-                    text_accumulator = remainder.lstrip()  # Keep the remaining text
+                    phrase_end_index
+                    == os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
+                ):
+                    continue
+
+            if phrase.strip() != "":  # if sentence only have \n or space, we could skip
+                preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
+                    filter, use_ssml, phrase
+                )
+                yield preprocessed_phrase, overlap
+                text_accumulator = remainder.lstrip()  # Keep the remaining text
 
         if text_accumulator != "":
             logger.debug(f"Text for synth flushed:{text_accumulator}")
@@ -228,7 +230,7 @@ class AzureTTSViseme(AzureTextToSpeech):
     # Word boundary callbacks (used by short utterance functions)
     def create_wb_cb(self) -> Callable:
         def _wb_cb(evt):
-            logger.debug(f"Word boundary: {(evt.audio_offset+5000)/10000} {evt.text}")
+            # logger.debug(f"Word boundary: {(evt.audio_offset+5000)/10000} {evt.text}")
             self.wordboundary_log.append((evt.audio_offset + 5000) / 10000)
 
         return _wb_cb

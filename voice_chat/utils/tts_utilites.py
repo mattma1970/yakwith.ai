@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TTSUtilities:
 
     @classmethod
-    def get_sentance_break_regex(cls):
+    def get_sentance_break_regex(cls) -> str:
         return [r"\.(?![0-9])", r"[!?,;:]"]
 
     def get_sentance_end_regex(cls):
@@ -90,12 +90,16 @@ class TTSUtilities:
         @returns:
             Tuple[str,str,str]: first phrase, next overlap_length words following the first_phrase, all words following the first_phrase
         """
-        words_for_synth = re.split(r"\s+", text_for_synth.lstrip())
+        remainder: str = ""
+        overlap: str = ""
+
+        words_for_synth = re.split(r"(?<=\S)\s+(?=\S)", text_for_synth)
 
         if len(words_for_synth) < phrase_length:
-            return text_for_synth, "", ""
+            return phrase, "", ""
 
         phrase = " ".join(words_for_synth[:phrase_length])
+        remainder = " ".join(words_for_synth[phrase_length:])
 
         for break_marker in cls.get_sentance_break_regex():  # non-space sentance breaks
             match = re.search(break_marker, phrase)
@@ -103,22 +107,19 @@ class TTSUtilities:
                 return (
                     phrase[: match.start() + 1],
                     "",
-                    phrase[match.start() + 1 :],
+                    phrase[(match.start() + 1) :] + " " + remainder,
                 )  # include the punctuation mark
 
         # If we made it here then there isn't natural pause so we'll return the _phrase plus the next overlap_length words.
-        if len(words_for_synth) > phrase_length:
+        try:
             _overlap_word_count = min(
                 len(words_for_synth), phrase_length + overlap_length
             )
-            if overlap_length > 0:
-                overlap_words = " ".join(
-                    words_for_synth[phrase_length:_overlap_word_count]
-                )
-            else:
-                overlap_words = ""
+            overlap = " ".join(words_for_synth[phrase_length:_overlap_word_count])
+        except:
+            pass
 
-            return phrase, overlap_words, " ".join(words_for_synth[phrase_length:])
+        return phrase, overlap, remainder
 
     @classmethod
     def prepare_for_synthesis(cls, filter, use_ssml, phrase):
