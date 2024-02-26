@@ -7,6 +7,7 @@ from queue import Queue
 from enum import Enum
 
 from griptape.structures import Agent
+from griptape.memory.structure import ConversationMemory
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
     HuggingFaceInferenceClientPromptDriver,
@@ -22,8 +23,9 @@ import logging
 from omegaconf import OmegaConf
 
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
-from voice_chat.data_classes.mongodb_helper import ModelHelper, ModelChoice
-from voice_chat.service.TTS import TextToSpeechClass
+from voice_chat.data_classes import PromptAccumulator
+from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
+from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +69,9 @@ class YakAgent:
     """
 
     business_uid: str = field(default="default", kw_only=True)
-    model_choice: ModelChoice = field(default=None)  # User choice of model in settings.
 
+    """ Model and prompting properties """
+    model_choice: ModelChoice = field(default=None)  # User choice of model in settings.
     model_driver_config: Optional[ModelDriverConfiguration] = field(
         default=None
     )  # Allow config to be injected.
@@ -78,8 +81,15 @@ class YakAgent:
     )  # TODO remove. deprecated after adding mongo backend
     rules: Optional[list[str]] = field(default=Factory(list))
     user_id: Optional[str] = field(default=None)
+    prompt_accumulator: PromptAccumulator = field(
+        factory=PromptAccumulator
+    )  # Used to collect incomplete prompts until a complete one is ready.
 
+    """ Properties related to the griptape Agent """
     task: Optional[str] = field(default="text_generation", kw_only=True)
+    enable_memory: bool = field(
+        default=True
+    )  # Uses Griptape.ConversationMemory as default of False.
     stream: Optional[bool] = field(default=False)
     streaming_event_listeners: Optional[List[EventListener]] = field(
         default=None, kw_only=True
@@ -90,14 +100,16 @@ class YakAgent:
         default=YakStatus.IDLE
     )  # Access via status property
 
-    voice_id: str = field()  # Agent voice id from STT provider.
+    """ Avatar Properties """
+    voice_id: str = field(default="NONE")  # Agent voice id from STT provider.
     avatar_config: Dict = field(
         default=Factory(dict)
     )  # Primarily for avatar animations including blendshapes.
-
     TextToSpeech: TextToSpeechClass = field(
         default=None
-    )  # Object dealing with speech synthesis, visemes and blendshapes.
+    )  # Object dealing with speech synthesis, visemes and blendshapes. Assinged on first use.
+
+    notes: str = field(default="")  # Misc text field with unspecified primary use case.
 
     def __attrs_post_init__(self):
         try:
@@ -151,6 +163,7 @@ class YakAgent:
                 logger_level=logging.ERROR,
                 rules=[Rule(rule) for rule in self.rules],
                 stream=self.stream,
+                memory=ConversationMemory() if self.enable_memory else None,
                 # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
             )
         elif self.model_choice.provider == "openai":
@@ -162,6 +175,7 @@ class YakAgent:
                     logger_level=logging.ERROR,
                     rules=[Rule(rule) for rule in self.rules],
                     stream=self.stream,
+                    memory=ConversationMemory() if self.enable_memory else None,
                 )
             except Exception as e:
                 logger.error(

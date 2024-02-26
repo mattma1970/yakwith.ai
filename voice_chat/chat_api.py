@@ -11,6 +11,7 @@ import math
 import urllib
 import pickle
 import ast
+from collections import defaultdict
 
 from PIL import Image
 import io
@@ -32,19 +33,22 @@ from datetime import datetime
 
 import azure.cognitiveservices.speech as speechsdk
 
-from voice_chat.yak_agents import YakAgent, YakStatus, ServiceAgent
-from voice_chat.data_classes.chat_data_classes import (
+from voice_chat.yak_agents import YakAgent, YakStatus, ServiceAgent, Task
+from voice_chat.data_classes.api import (
     ApiUserMessage,
     AppParameters,
     SessionStart,
+    ThirdPartyServiceAgentRequest,
     SttTokenRequest,
     ServiceAgentRequest,
+)
+from voice_chat.data_classes.chat_data_classes import (
     StdResponse,
     MultiPartResponse,
     BlendShapesMultiPartResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
-from voice_chat.data_classes.mongodb_helper import (
+from voice_chat.data_classes.mongodb import (
     MenuHelper,
     DatabaseConfig,
     ServicesHelper,
@@ -54,15 +58,19 @@ from voice_chat.data_classes.mongodb_helper import (
     ModelChoice,
     ModelHelper,
 )
-from voice_chat.data_classes.avatar_config import AvatarConfigParser
-from voice_chat.data_classes.redis_helper import RedisHelper
+from voice_chat.data_classes.avatar import AvatarConfigParser
+from voice_chat.data_classes.redis import RedisHelper
 from voice_chat.utils.cache_utils import CacheUtils, QueryType, TTSUtilities
+
+from voice_chat.utils import TimerContextManager
 
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
-from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
-from voice_chat.service.TTS import TextToSpeechClass
+from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+from voice_chat.text_to_speech.TTS import TextToSpeechClass
+
+from voice_chat.utils import STTUtilities
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -101,6 +109,9 @@ app.add_middleware(
 )
 
 agent_registry = {}  # Used to store one agent per session.
+service_agent_registry = defaultdict(
+    None
+)  # For LLM subclasses that do misc tasks like checking for sentance completeness.
 
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
@@ -161,6 +172,50 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
         )
 
     return {"temp_token": temp_token}
+
+
+@app.post("/agent/create/service_agent")
+def agent_create_service_agent(config: ServiceAgentRequest) -> Dict:
+    """
+    A service_agent is an LLM Agent used for utilities functions such as assessing if an utterance is completed. These can use either a
+    local or a 3rdparty API. Unlike YakAgents that power avatars these agents are intended to provide short, quick responses and do not have conversation memory.
+    The model used is
+    This endpoint creates a service agent and registers it save it to the agent_registry.
+    Arguments:
+        business_uid: unique id for the cafe.
+        user_id: a unique id for the user supplied by authentication tool.
+    Returns:
+        session_id: str(uuid4): the session_id under which the agent is registered.
+    """
+    service_agent = None
+    msg: str = ""
+    ok: bool = False
+
+    try:
+        cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
+        model_choice: ModelChoice = ModelHelper.get_model_by_id(
+            database, cafe.model
+        )  # TODO allow an alternative model to be specified.
+
+        logger.info(
+            f"Creating service agent for: {config.business_uid} in {config.session_id}"
+        )
+        service_agent = YakAgent(
+            business_uid=config.business_uid,
+            stream=False,
+            model_choice=model_choice,
+            enable_memory=False,
+        )
+
+        service_agent_registry[config.session_id] = service_agent
+        logger.info(
+            f"Ok. Created service agent for session_id {config.session_id}, llm:{model_choice.name}"
+        )
+        ok = True
+    except Exception as e:
+        msg = f"A problem occured while creating a yak_agent: {e}"
+        logger.error(msg)
+    return {"status": "success" if ok else "error", "msg": msg, "payload": ""}
 
 
 @app.get("/agent/reservation/")
@@ -236,6 +291,7 @@ def agent_create(config: SessionStart) -> Dict:
                 voice_id=voice_id,
                 avatar_config=avatar_config,
                 model_choice=model_choice,
+                notes=cafe.notes,
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -382,7 +438,10 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
             yak.TextToSpeech = TTS
 
         def stream_generator(prompt):
-            stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+            with TimerContextManager(
+                "SAY: GenerateAudioAndVisemes", logger, logging.DEBUG
+            ):
+                stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
             yield BlendShapesMultiPartResponse(
                 json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
             ).prepare()
@@ -500,6 +559,34 @@ async def talk_with_avatar(message: ApiUserMessage):
     cache_key: str = ""
     cached_response: Dict = None
 
+    isCompleteUtterance: bool = True
+    with TimerContextManager("COMPLETED UTTERANCE", logger, logging.DEBUG):
+        service_agent: ServiceAgent = None
+        if not (session_id in service_agent_registry):
+            agent_create_service_agent(
+                ServiceAgentRequest(
+                    session_id=session_id, business_uid=yak.business_uid
+                )
+            )
+        try:
+            service_agent = service_agent_registry[session_id]
+            yak.prompt_accumulator.push(message.user_input)
+            completion_check: str = STTUtilities.isCompleteThought(
+                input_text=yak.prompt_accumulator.prompt, service_agent=service_agent
+            )
+            isCompleteUtterance = completion_check["answer"]
+            if isCompleteUtterance:
+                message.user_input = yak.prompt_accumulator.prompt
+                yak.prompt_accumulator.reset()
+            else:
+                logger.debug(f"Input complete:{completion_check}")
+                return
+
+        except Exception as e:
+            logger.error(
+                f"Error evaluating completeness for session_id: {session_id}: {e}"
+            )
+
     if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
         cache_key = cache.get_cache_key(
@@ -574,7 +661,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     break
 
                 logger.debug(
-                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} {overlap}"
+                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
                 )
 
                 response: str = ""
@@ -588,11 +675,12 @@ async def talk_with_avatar(message: ApiUserMessage):
                 # Note: cached QueryType.Responses are only use for latency reduction and so only short utterances are cached, utterances
                 #       that are at most one text chunk long.
                 if yak.usingCache and cache:
-                    response, visemes, blendshapes, audio_data = (
-                        CacheUtils.get_from_cache(
-                            QueryType.RESPONSE, phrase, yak, cache
+                    with TimerContextManager("CheckCache", logger, logger_level):
+                        response, visemes, blendshapes, audio_data = (
+                            CacheUtils.get_from_cache(
+                                QueryType.RESPONSE, phrase, yak, cache
+                            )
                         )
-                    )
                     # visemes/blendshape/audio_data are all stored as lists of chunks.
                     # However, only a single chunk is acceptabled for short utterances so all others are drpped.
                     if audio_data and isinstance(audio_data, list):
@@ -600,12 +688,14 @@ async def talk_with_avatar(message: ApiUserMessage):
                         visemes = visemes[0]
                         blendshapes = blendshapes[0]
 
-                        logger.debug(f"Yeild first utterance from cache:{response}")
-
                 if response == "":
-                    stream, visemes, blendshapes = TTS.audio_viseme_generator(
-                        phrase, overlap
-                    )
+                    logger.debug(f"TextChunkSentForSynth:{phrase}")
+                    with TimerContextManager(
+                        "GenerateAudioAndVisemes", logger, logger_level
+                    ):
+                        stream, visemes, blendshapes = TTS.audio_viseme_generator(
+                            phrase, overlap
+                        )
                     audio_data = (
                         stream.audio_data
                     )  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
@@ -616,9 +706,12 @@ async def talk_with_avatar(message: ApiUserMessage):
                             truncated_duration_ms = TTS.wordboundary_log[
                                 int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
                             ]
-                            audio_data = TTSUtilities.truncate_audio_byte_data(
-                                audio_data, truncated_duration_ms
-                            )
+                            with TimerContextManager(
+                                "AudioTruncationTimer", logger, logger_level
+                            ):
+                                audio_data = TTSUtilities.truncate_audio_byte_data(
+                                    audio_data, truncated_duration_ms
+                                )
                         except Exception as e:
                             logger.error(f"Error truncating audio: {e} ")
                     yielded_from_cache = False
@@ -626,7 +719,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     yielded_from_cache = True
 
                 logger.debug(
-                    f"YEILDED:(B,V):: {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
+                    f"YEILD:(phrase, source, #B,#V, time):: {'CACHE' if yielded_from_cache else 'GENERATED'}  *{phrase}* {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
                 )
 
                 yield BlendShapesMultiPartResponse(
@@ -700,7 +793,7 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 
 
 @app.post("/services/service_agent/")
-def service_agent(request: ServiceAgentRequest) -> Dict:
+def service_agent(request: ThirdPartyServiceAgentRequest) -> Dict:
     """Generic LLM model response from service_agent."""
     service_agent: ServiceAgent = None
     response = None
@@ -1047,7 +1140,8 @@ if __name__ == "__main__":
         cache = None
 
     logger = logging.getLogger("YakChatAPI")
-    logger.setLevel(logging.DEBUG)
+    logger_level = logging.DEBUG
+    logger.setLevel(logger_level)
 
     log_file_path = os.path.join(app_config.logging.root_folder, "session_logs.log")
     createIfMissing(log_file_path)
@@ -1055,7 +1149,7 @@ if __name__ == "__main__":
     file_handler = RotatingFileHandler(
         log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
     )
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logger_level)
 
     # Create formatters and add it to handlers
     file_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")

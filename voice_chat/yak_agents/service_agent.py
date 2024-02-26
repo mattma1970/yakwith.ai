@@ -26,7 +26,7 @@ Task = Enum("Task", ["NONE", "TEXT_CORRECTION"])
 
 class Provider(Enum):
     OPENAI = 0
-    HUGGINGFACE_LOCAL = 1
+    LOCAL = 1
 
 
 def to_provider(value):

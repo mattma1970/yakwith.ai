@@ -15,7 +15,7 @@ from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
 from voice_chat.utils.tts_utilites import TTSUtilities
-from voice_chat.service.TTS import TextToSpeechClass
+from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
 from utils import TimerContextManager, createIfMissing
 
@@ -279,10 +279,10 @@ class AzureTTSViseme(AzureTextToSpeech):
             text = text + " " + overlap
 
         self.clear_wordboundary_log()  # Reset wb log before evary chunk is generated.
-        with TimerContextManager(f"SpeechSynth:{text}", logger, logging.DEBUG) as timer:
-            audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
-                text
-            )
+
+        audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
+            text
+        )
         if audio_output.cancellation_details is not None:
             logger.debug(
                 f"Reason: {audio_output.reason}, details: {audio_output.cancellation_details.error_details}"
