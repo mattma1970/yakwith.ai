@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class STTUtilities:
-
     @classmethod
     def isCompleteThought(
         cls,
@@ -32,22 +31,24 @@ class STTUtilities:
         Note: from early experiments, requiring a rationale for the answer leads to materially better results than just asking for a yes not response.
         """
         if prompt_template.strip() == "":
-            prompt_template = """Does the Statement, quoted below, makes sense if it were spoken to a restaurant waiter. 
+            prompt_template = """Does the Statement, quoted below, makes sense if it were spoken to a restaurant waiter. You must ignore spelling mistakes and words that could be a food item.
                                     Answer in json format with the following schema {{'answer': a boolean indicating whether the sentance makes sense, 'reason': a 6 word explaination of your reasoning}}.  Statement:'{input_text}'"""
 
             prompt: str = prompt_template.replace("{input_text}", input_text)
 
         response: str = None
-        ret: str = ""
+        ret: Dict = {}
         try:
             # use defaults set on server.
             response = service_agent.run(prompt)
         except Exception as e:
-            ret = f""
-            logger.error(response)
+            ret = {}
+            logger.error(f"Error in isCompleteThought: {e}")
         if getJSON:
             try:
                 ret = json.loads(response.output.value)
             except:
                 logger.error("Invalid json returned from completeness check")
+        else:
+            raise RuntimeWarning("IsCompleteThought only support JSON responses.")
         return ret

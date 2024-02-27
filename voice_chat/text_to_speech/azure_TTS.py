@@ -41,7 +41,6 @@ class AzureTextToSpeech(TextToSpeechClass):
     permitted_character_regex: str = "[^a-zA-Z0-9,. \s'?!;:\$]"  # Azure specific.
 
     def __attrs_post_init__(self):
-
         self.blendshape_options = {
             "visemes_only": "redlips_front",
             "blendshapes": "FacialExpression",

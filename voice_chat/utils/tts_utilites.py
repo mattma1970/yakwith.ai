@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class TTSUtilities:
-
     @classmethod
     def get_sentance_break_regex(cls) -> str:
         return [r"\.(?![0-9])", r"[!?,;:]"]

@@ -4,7 +4,6 @@ from enum import Enum
 
 
 class TextToSpeechClass(ABC):
-
     @abstractmethod
     def text_preprocessor(
         self,

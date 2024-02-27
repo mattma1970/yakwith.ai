@@ -72,3 +72,9 @@ class ThirdPartyServiceAgentRequest(BaseModel):
     task: Optional[str]
     prompt: str
     stream: bool
+
+
+class LocalServiceAgentResquest(BaseModel):
+    prompt: str
+    session_id: str
+    business_uid: str

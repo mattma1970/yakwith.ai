@@ -62,3 +62,7 @@ def has_pronouns(text: str, additional_words: List[str] = []) -> bool:
         for pronoun in pronouns
     ]
     return any(pronouns_check)
+
+
+def safe_key(key):
+    return re.sub(r"[^0-9a-zA-Z]", "", key)

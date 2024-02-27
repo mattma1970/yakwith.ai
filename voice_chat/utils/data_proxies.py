@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 
 
 class DataProxy:
-
     @classmethod
     def get_all(cls, data_source_name: str) -> List[Dict]:
         """select * from data_proxies.data_filename"""
