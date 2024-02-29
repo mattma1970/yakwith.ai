@@ -14,20 +14,19 @@ from attrs import define, field, Factory
 from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars
+from voice_chat.utils.tts_utilites import TTSUtilities
+from voice_chat.text_to_speech.TTS import TextToSpeechClass
+
 from utils import TimerContextManager, createIfMissing
 
 import re, json
-
-MIN_LENGTH_FOR_FIRST_SYNTHESIS = 20
-MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS = 150
-
 import logging
 
 logger = logging.getLogger("YakChatAPI")
 
 
 @define
-class AzureTextToSpeech:
+class AzureTextToSpeech(TextToSpeechClass):
     voice_id: str = field(
         default="en-AU-KimNeural", kw_only=False
     )  # Ensure this is a valid voice id from you TTS provider
@@ -35,18 +34,13 @@ class AzureTextToSpeech:
         default=speechsdk.audio.AudioOutputConfig(use_default_speaker=True),
         kw_only=True,
     )  # can be overwritten
-    tts_sentence_end: List = field(factory=list, kw_only=True)
-    tts_sentence_end_regex: List = field(factory=list, kw_only=True)
+
     speech_synthesizer: speechsdk.SpeechSynthesizer = field(init=False)
     full_message: str = field(init=False)
     blendshape_options: dict = field(factory=dict)
+    permitted_character_regex: str = "[^a-zA-Z0-9,. \s'?!;:\$]"  # Azure specific.
 
     def __attrs_post_init__(self):
-        # tts sentence end mark used to find natural breaks for chunking data to send to TTS
-        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n", " "]
-
-        self.tts_sentence_end_regex = [r"\.(?![0-9])", r"[!?,;:]"]
-
         self.blendshape_options = {
             "visemes_only": "redlips_front",
             "blendshapes": "FacialExpression",
@@ -79,17 +73,6 @@ class AzureTextToSpeech:
 
         logger.debug(f"Created Azure Speech Synthesizer.")
 
-    def escape_for_ssml(self, text: str):
-        # Azure ssml doesn't need (or accept " and ' entiry replacements)
-        special_chars: dict = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-        }
-        for char, replacement in special_chars.items():
-            text = text.replace(char, replacement)
-        return text
-
     def text_preprocessor(
         self,
         text_stream: Iterable[TextArtifact],
@@ -97,83 +80,83 @@ class AzureTextToSpeech:
         use_ssml: bool = True,
     ):
         """
+        Generator of text chunks to be sent for speech synthesis.
         Accumulates the streaming text and yeilds at natural boundaries in the text.
         For latency improvement, the first chunck sent for synthesis should be as short as possible.
+        Short chunks, less than a sentance long, are synthesized as if they were complete sentances and so have
+        incorrect, falling, intonation at the end. The solution to create overlap between chunks for the first text chunk.
 
         Arguments:
             text_stream. TextArtificat generator
             filter: str: A valid regex that passes acceptable characters (useful for removing punctuation)
         Yields:
-            text preprocess so that the chunk that is yeilded is split on natural boundaries such sentance end markers or list
+            Tuple[str,str]: Text to be generated and cached, additional words used for correcting intonation of short, sub-sentance phrases.
         """
 
-        text_for_synth = ""
+        text_accumulator = ""
         text_for_accumulation = ""
         is_first_sentance: bool = (
             True  # first chunk of response yeilded needs to be optimised for speed.
         )
 
         for chunk in text_stream:
-            text_for_synth += (
-                chunk.value
-            )  # Acculate the text until a natural break in text is found. Then overwrite this.
-            self.full_message += chunk.value  # For caching etc.
-            min_length = (
-                MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS
-                if is_first_sentance is False
-                else MIN_LENGTH_FOR_FIRST_SYNTHESIS
-            )
-            if len(chunk.value) > 0 and len(text_for_synth) >= min_length:
-                last_match_index: int = -1
-                if is_first_sentance:
-                    text_for_synth = text_for_synth.lstrip()
-                    # Find first occurence so we can get speech synth underway quickly
-                    for sentence_marker in self.tts_sentence_end_regex:
-                        match = re.search(sentence_marker, text_for_synth)
-                        if match and match.start() > 0:
-                            last_match_index = match.start()
-                            break
+            phrase: str = remove_problem_chars(chunk.value, filter)
+            text_accumulator += phrase  # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
+            self.full_message += phrase  # For caching etc.
 
-                    if last_match_index < 0:
-                        start_idx = min(min_length, len(text_for_synth))
-                        match = re.search(r"\s(?=\S*$)", text_for_synth[:start_idx])
-                        last_match_index = match.start()
+            phrase, overlap, remainder = "", "", ""
 
-                    is_first_sentance = False
-                else:
-                    for sentence_marker in self.tts_sentence_end_regex:
-                        # Else be greedy with the text size.
-                        for match in re.finditer(sentence_marker, text_for_synth):
-                            # Get the last natural break position over all the sentance markers
-                            if match.start() > last_match_index:
-                                last_match_index = match.start()
-
-                if last_match_index > 0:
-                    sentance, remaining_text = (
-                        text_for_synth[:last_match_index],
-                        text_for_synth[last_match_index:],
+            if is_first_sentance:
+                if text_accumulator.strip().count(" ") > int(
+                    os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]
+                ):
+                    phrase, overlap, remainder = TTSUtilities.get_first_utterance(
+                        text_accumulator,
+                        phrase_length=int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]),
+                        overlap_length=int(
+                            os.environ["WORD_COUNT_OVERLAP_FOR_FIRST_SYNTHESIS"]
+                        ),
                     )
-                    if (
-                        sentance.strip() != ""
-                    ):  # if sentence only have \n or space, we could skip
-                        if filter is not None:
-                            sentance = remove_problem_chars(sentance, filter)
-                        if use_ssml:
-                            sentance = self.escape_for_ssml(sentance)
-                        logger.debug(f"Text for synth: {sentance}")
-                        yield sentance
-                        text_for_synth = (
-                            remaining_text.lstrip()
-                        )  # Keep the remaining text
-                        last_match_index = -1
-                        sentance = ""
-
-        if text_for_synth != "":
-            logger.debug(f"Text flushed for synth (not filtered):{text_for_synth}")
-            if filter is not None:
-                yield remove_problem_chars(text_for_synth, filter)
+                    is_first_sentance = False
             else:
-                yield text_for_synth
+                # Else be greedy with the text size.
+                phrase_end_index: int = int(
+                    os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
+                )
+                if len(text_accumulator) < phrase_end_index:
+                    continue
+                # Else be greedy with the text size.
+                for sentence_break_regex in TTSUtilities.get_sentance_break_regex():
+                    for match in re.finditer(sentence_break_regex, text_accumulator):
+                        # Get the last natural break position over all the sentance markers
+                        if match and match.start() > phrase_end_index:
+                            phrase_end_index = match.start()
+
+                phrase, overlap, remainder = (
+                    text_accumulator[:phrase_end_index],
+                    "",
+                    text_accumulator[phrase_end_index:],
+                )
+                # If the phrase index hasn't moved then continue collecting text chunks.
+                if (
+                    phrase_end_index
+                    == os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
+                ):
+                    continue
+
+            if phrase.strip() != "":  # if sentence only have \n or space, we could skip
+                preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
+                    filter, use_ssml, phrase
+                )
+                yield preprocessed_phrase, overlap
+                text_accumulator = remainder.lstrip()  # Keep the remaining text
+
+        if text_accumulator != "":
+            logger.debug(f"Text for synth flushed:{text_accumulator}")
+            preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
+                filter, use_ssml, text_accumulator
+            )
+            yield preprocessed_phrase, ""
 
     def send_audio_to_speaker(self, text: str) -> None:
         """send to local speaker on server as per audio configuration."""
@@ -229,19 +212,41 @@ class AzureTTSViseme(AzureTextToSpeech):
     )  # options visemes_only, blendshapes(<= both visemes and facial blendshapes)
     use_blendshapes: bool = field(default=True)
     blendshapes_log: List[str] = field(factory=list)
+    wordboundary_log: List[float] = field(factory=list)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        self.viseme_callback = self.viseme_cb()
+        self.viseme_callback = self.create_viseme_cb()
 
         self.speech_synthesizer.viseme_received.connect(
             self.viseme_callback
         )  # Subscribe the speech synthesizer to the viseme events
 
-    def viseme_cb(self) -> Callable:
+        self.subscribe_to_wb_events()
+
+    # Callback section
+
+    # Word boundary callbacks (used by short utterance functions)
+    def create_wb_cb(self) -> Callable:
+        def _wb_cb(evt):
+            # logger.debug(f"Word boundary: {(evt.audio_offset+5000)/10000} {evt.text}")
+            self.wordboundary_log.append((evt.audio_offset + 5000) / 10000)
+
+        return _wb_cb
+
+    def unsubscribe_to_wb_events(self):
+        self.speech_synthesizer.synthesis_word_boundary.disconnect_all()
+
+    def subscribe_to_wb_events(self):
+        self.speech_synthesizer.synthesis_word_boundary.connect(self.create_wb_cb())
+
+    def clear_wordboundary_log(self):
+        self.wordboundary_log = []
+
+    def create_viseme_cb(self) -> Callable:
         def _viseme_logger(evt):
             """Call back to capture viseme and blendshapes"""
-            start: float = evt.audio_offset / 10000000
+            start: float = evt.audio_offset / 10000000  # Time in seconds
             msg: Dict = {"start": start, "end": 10000.0, "value": evt.viseme_id}
 
             if evt.animation == "":
@@ -264,15 +269,19 @@ class AzureTTSViseme(AzureTextToSpeech):
 
         return _viseme_logger
 
-    def audio_viseme_generator(self, text):
+    def audio_viseme_generator(self, text: str, overlap: str = ""):
         """
         Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events.
         Note: visemes and blendshapes generated asyn via the viseme_cb callback invokations and pushed to the respective logs.
         """
-        with TimerContextManager(f"SpeechSynth:{text}", logger, logging.DEBUG) as timer:
-            audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
-                text
-            )
+        if overlap != "":
+            text = text + " " + overlap
+
+        self.clear_wordboundary_log()  # Reset wb log before evary chunk is generated.
+
+        audio_output: speechsdk.SpeechSynthesisResult = self.audio_stream_generator(
+            text
+        )
         if audio_output.cancellation_details is not None:
             logger.debug(
                 f"Reason: {audio_output.reason}, details: {audio_output.cancellation_details.error_details}"

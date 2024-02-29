@@ -1,5 +1,5 @@
 import pytest
-from voice_chat.yak_agents import ServiceAgent, Provider, Task
+from voice_chat.yak_agents import ExternalServiceAgent, Provider, Task
 from griptape.structures import Agent
 from unittest.mock import patch, Mock
 
@@ -11,7 +11,7 @@ def test_service_agent_initialization():
         "os.environ",
         {"SERVICE_AGENT_MODEL": "test-model", "OPENAI_API_KEY": "test-key"},
     ):
-        agent = ServiceAgent(provider="OPENAI")
+        agent = ExternalServiceAgent(provider="OPENAI")
 
         assert agent.provider == Provider.OPENAI
         assert agent.model == "gpt-3.5-turbo"
@@ -27,7 +27,7 @@ def test_do_job_with_agent():
     mock_agent = Mock()
     mock_agent.run.return_value.output.to_text.return_value = "test response"
 
-    agent = ServiceAgent(provider="OPENAI")
+    agent = ExternalServiceAgent(provider="OPENAI")
     agent.agent = mock_agent  # Injecting mock agent
 
     ok, response = agent.do_job("test prompt")
@@ -36,7 +36,7 @@ def test_do_job_with_agent():
 
 
 def test_do_job_without_agent():
-    agent = ServiceAgent(provider="OPENAI")
+    agent = ExternalServiceAgent(provider="OPENAI")
     agent.agent = None  # Ensure no agent is present
 
     ok, response = agent.do_job("test prompt")

@@ -7,18 +7,19 @@ from typing import List, Dict, Optional, Any
 import os
 from os import PathLike
 import json
+from dotenv import load_dotenv
 
 
 class DataProxy:
-    DATA_PROXIES_ROOT_FOLDER = "/home/ubuntu/Repos/yakwith.ai/voice_chat/data_proxies"
-
     @classmethod
-    def get_all(
-        cls, data_source_name: str, root: str = DATA_PROXIES_ROOT_FOLDER
-    ) -> List[Dict]:
+    def get_all(cls, data_source_name: str) -> List[Dict]:
         """select * from data_proxies.data_filename"""
         data = None
-        fqn = os.path.join(root, f"{data_source_name}.json")
+        fqn = os.path.join(
+            os.environ["APPLICATION_ROOT_FOLDER"],
+            os.environ["DATA_PROXIES_PATH"],
+            f"{data_source_name}.json",
+        )
         print(f"{fqn}")
         if os.path.exists(fqn):
             try:
@@ -35,10 +36,9 @@ class DataProxy:
         cls,
         authorization_key: str,
         data_source_name: str = "authorized_clients",
-        root: str = DATA_PROXIES_ROOT_FOLDER,
     ) -> bool:
         """Check the passed in key is valid"""
-        clients = cls.get_all(data_source_name, root)
+        clients = cls.get_all(data_source_name)
         for client in clients["authorized_clients"]:
             if authorization_key == client["authorization_key"]:
                 return True
@@ -51,18 +51,17 @@ class DataProxy:
         authorization_data_source_name: str,
         service_name: str,
         service_data_source_name: str,
-        root: str = DATA_PROXIES_ROOT_FOLDER,
     ) -> Dict:
         """Get the settings for the 3rd party api"""
         response = None
 
         authorized = cls.verify_client_authorized(
-            authorization_key, authorization_data_source_name, root=root
+            authorization_key, authorization_data_source_name
         )
         if not authorized:
             raise RuntimeError("Rquest for service key from unauthorized client.")
 
-        configs = cls.get_all(service_data_source_name, root)
+        configs = cls.get_all(service_data_source_name)
         for config in configs["service_configs"]:
             if config["name"] == service_name:
                 response = config
@@ -70,5 +69,6 @@ class DataProxy:
 
 
 if __name__ == "__main__":
+    load_dotenv()
     print(DataProxy.get_all("service_conafigs"))
     print(len(DataProxy.get_all("service_configs")))

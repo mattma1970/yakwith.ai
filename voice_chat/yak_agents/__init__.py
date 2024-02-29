@@ -1,11 +1,14 @@
 from .yak_agent import YakAgent
 from .yak_agent import YakStatus
-from .service_agent import ServiceAgent, Provider, Task
+from .external_service_agent import ExternalServiceAgent, Provider, Task
+from .yak_service_agent import YakServiceAgentFactory, YakServiceAgent
 
 __all__ = [
     "YakAgent",
     "YakStatus",
-    "ServiceAgent",
+    "ExternalServiceAgent",
     "Provider",
     "Task",
+    "YakServiceAgentFactory",
+    "YakServiceAgent",
 ]

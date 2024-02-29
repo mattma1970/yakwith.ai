@@ -1,3 +1,8 @@
+from omegaconf import OmegaConf, DictConfig
+from voice_chat.configs import AppConfig
+
+Configurations = AppConfig.Configurations
+
 from fastapi import FastAPI, Response, File, UploadFile, HTTPException, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,40 +16,57 @@ import math
 import urllib
 import pickle
 import ast
+from collections import defaultdict
 
 from PIL import Image
 import io
 
 from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Any, Iterator, Tuple
+from typing import List, Optional, Union, Dict, Any, Iterator, Tuple, Generator
 from dotenv import load_dotenv
 from uuid import uuid4
 from attr import define, field, Factory
 import argparse
 import os
 import json
-import logging
-from logging.handlers import RotatingFileHandler
 from datetime import time, datetime
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 
+import logging
+from logging.handlers import RotatingFileHandler
+import voice_chat.utils.metrics as GlobalMetrics
+
 import azure.cognitiveservices.speech as speechsdk
 
-from voice_chat.yak_agents import YakAgent, YakStatus, ServiceAgent
-from voice_chat.data_classes.chat_data_classes import (
+from voice_chat.yak_agents import (
+    YakAgent,
+    YakStatus,
+    ExternalServiceAgent,
+    Task,
+    YakServiceAgentFactory,
+)
+
+from voice_chat.data_classes.api import (
     ApiUserMessage,
     AppParameters,
     SessionStart,
+    ThirdPartyServiceAgentRequest,
+    LocalServiceAgentResquest,
     SttTokenRequest,
     ServiceAgentRequest,
+)
+
+from voice_chat.data_classes import PromptManager
+
+from voice_chat.data_classes.chat_data_classes import (
     StdResponse,
     MultiPartResponse,
     BlendShapesMultiPartResponse,
 )
 from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
-from voice_chat.data_classes.mongodb_helper import (
+from voice_chat.data_classes.mongodb import (
     MenuHelper,
     DatabaseConfig,
     ServicesHelper,
@@ -54,13 +76,19 @@ from voice_chat.data_classes.mongodb_helper import (
     ModelChoice,
     ModelHelper,
 )
-from voice_chat.data_classes.avatar_config import AvatarConfigParser
-from voice_chat.data_classes.redis_helper import RedisHelper
+from voice_chat.data_classes.avatar import AvatarConfigParser
+from voice_chat.data_classes.redis import RedisHelper
+from voice_chat.utils.cache_utils import CacheUtils, QueryType, TTSUtilities
+
+from voice_chat.utils import TimerContextManager
 
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
-from voice_chat.service.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+from voice_chat.text_to_speech.TTS import TextToSpeechClass
+
+from voice_chat.utils import STTUtilities
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
@@ -71,7 +99,6 @@ from griptape.utils import Stream
 from griptape.artifacts import TextArtifact
 from griptape.memory.structure import Run
 
-from omegaconf import OmegaConf, DictConfig
 
 _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
 _DEFAULT_BUSINESS_UID = "all"
@@ -86,9 +113,8 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
-    "https://app.yakwith.ai",
-    "https://dev.d2civivj65v1p0.amplifyapp.com",
 ]
+origins.extend(Configurations.api.cors_urls)
 
 app.add_middleware(
     CORSMiddleware,
@@ -99,6 +125,9 @@ app.add_middleware(
 )
 
 agent_registry = {}  # Used to store one agent per session.
+service_agent_registry = defaultdict(
+    None
+)  # For LLM subclasses that do misc tasks like checking for sentance completeness.
 
 
 def my_gen(response: Iterator[TextArtifact]) -> str:
@@ -135,18 +164,70 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
         "Content-Type": "application/json",
         "Authorization": service_config["api_token"],
     }
+    data: str = ""
+    if "data" in service_config:
+        data = json.dumps(
+            service_config["data"]
+        )  # If data present, it always takes precidence
+    else:
+        data = json.dumps({"expires_in": service_config["duration"]})
+
     r = requests.post(
         url=service_config["api_endpoint"],
         headers=headers,
-        data=json.dumps({"expires_in": service_config["duration"]}),
+        data=data,
     )
 
     if r.status_code == 200:
         logger.info("OK: Got temp STT token.")
         response = r.json()
-        temp_token = response["token"]
+        temp_token = response[service_config["token_key_name"]]
+    else:
+        logger.error(
+            f"Failed to get temp service token for {req.service_name}: Err code {r.status_code}: {r.text}"
+        )
 
     return {"temp_token": temp_token}
+
+
+@app.post("/agent/create/service_agent")
+def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
+    """
+    Create and register a localservice_agent: LLM agent used for utilities functions such as assessing if an utterance is completed. These can use either a
+    local or a 3rdparty API. Unlike YakAgents that power avatars these agents are intended to provide short, quick responses and do not have conversation memory.
+    The model used is
+    This endpoint creates a service agent and registers it save it to the agent_registry.
+    Arguments:
+        business_uid: unique id for the cafe.
+        session_uid:
+    Returns:
+        StdResponse object
+    """
+
+    msg: str = ""
+    ok: bool = False
+
+    if config.session_id in service_agent_registry:
+        return StdResponse(True, "Alread Exists", "")
+    try:
+        # Get the locally configured Service Agent model
+        cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
+        model_choice: ModelChoice = ModelHelper.get_model_by_id(
+            database, cafe.model
+        )  # TODO allow an alternative model to be specified.
+
+        if not config.session_id in service_agent_registry:
+            service_agent = YakServiceAgent(
+                config.business_uid, config.session_id, model_choice
+            )
+            if service_agent:
+                service_agent_registry[config.session_id] = service_agent
+        ok = True
+    except Exception as e:
+        msg = f"A problem occured while creating a yak_agent: {e}"
+        logger.error(msg)
+
+    return StdResponse(ok, msg, "")
 
 
 @app.get("/agent/reservation/")
@@ -213,7 +294,7 @@ def agent_create(config: SessionStart) -> Dict:
                 del avatar_config["voice"]
             else:
                 # Get the agent/avatar voice_id or fall back to system default.
-                voice_id = app_config.text_to_speech.default_voice_id
+                voice_id = Configurations.text_to_speech.default_voice_id
 
             yak_agent = YakAgent(
                 business_uid=config.business_uid,
@@ -222,6 +303,7 @@ def agent_create(config: SessionStart) -> Dict:
                 voice_id=voice_id,
                 avatar_config=avatar_config,
                 model_choice=model_choice,
+                notes=cafe.notes,
             )
 
         agent_registry[config.session_id] = yak_agent
@@ -313,7 +395,7 @@ def chat_with_agent(message: ApiUserMessage) -> Union[Any, Dict[str, str]]:
 @app.post("/get_agent_to_say")
 def get_agent_to_say(message: ApiUserMessage) -> Dict:
     """
-    Utility function to that gets the agent to say a particular message.
+    Utility function to that gets the agent to say a short message. Not suitable for long messages as its not optimized for latency. TODO
     Because prompt submitted to say contain all the needed context, we should always try the cache if its available.
     The inner function 'stream_generator' takes a text string not a streaming response.
     @return:
@@ -331,25 +413,66 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         )
 
     yak: YakAgent = agent_registry[session_id]
-
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
-    TTS: AzureTextToSpeech = AzureTTSViseme(
-        voice_id=yak.voice_id,
-        audio_config=None,
-        use_blendshapes=avatar_config.blendshapes,
-    )
 
-    def stream_generator(prompt):
-        stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
-        yield BlendShapesMultiPartResponse(
-            json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
-        ).prepare()
+    # See if text is in the cache
+    response, visemes, blendshapes, audio = "", [], [], ""
+    if yak.usingCache and cache:
+        response, visemes, blendshapes, audio = CacheUtils.get_from_cache(
+            QueryType.RESPONSE, message.user_input, yak, cache
+        )
 
-    logger.debug(f"Sending streaming response, session_id {session_id}")
-    return StreamingResponse(
-        stream_generator(message.user_input),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
+    if response != "":
+
+        def cached_stream_generator(visemes, blendshapes, audio):
+            logger.debug("Yielding from cache")
+
+            for i in range(len(visemes)):
+                yield BlendShapesMultiPartResponse(
+                    json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
+                ).prepare()
+
+        return StreamingResponse(
+            cached_stream_generator(visemes, blendshapes, audio),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+    else:
+        # otherwise generate it
+        TTS: TextToSpeechClass = None
+        if yak.TextToSpeech:
+            TTS = yak.TextToSpeech
+        else:
+            TTS = AzureTTSViseme(
+                voice_id=yak.voice_id,
+                audio_config=None,
+                use_blendshapes=avatar_config.blendshapes,
+            )
+            yak.TextToSpeech = TTS
+
+        def stream_generator(prompt):
+            with TimerContextManager(
+                "SAY: GenerateAudioAndVisemes", logger, logging.DEBUG
+            ):
+                stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+            yield BlendShapesMultiPartResponse(
+                json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+            ).prepare()
+            # Cache first utterances if cache is in use
+            if yak.usingCache and cache:
+                CacheUtils.cache_if_short_utterance(
+                    prompt,
+                    cache,
+                    yak,
+                    stream.audio_data,
+                    visemes,
+                    blendshapes,
+                )
+
+        logger.debug(f"Sending streaming response, session_id {session_id}")
+        return StreamingResponse(
+            stream_generator(message.user_input),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
 
 
 @app.get("/get_last_response/{session_id}")
@@ -398,8 +521,10 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     response = Stream(yak.agent).run(message.user_input)  # Streaming response.
     yak.agent_status = YakStatus.TALKING
 
-    def stream_generator(response) -> Tuple[Any, str]:
-        for phrase in TTS.text_preprocessor(response, filter=None):
+    def stream_generator(response) -> Generator[Any, str, Any]:
+        for phrase in TTS.text_preprocessor(
+            response, filter=TTS.permitted_character_regex
+        ):
             stream = TTS.audio_stream_generator(phrase)
             yield MultiPartResponse(json.dumps(phrase), stream.audio_data).prepare()
             if yak.status != YakStatus.TALKING:
@@ -444,11 +569,43 @@ async def talk_with_avatar(message: ApiUserMessage):
     # e.g Does the carrot cake contain nuts? vs. does it have nuts.
     # Short term solution is to filter out input text that contains pronouns such as it, they, its etc.
     cache_key: str = ""
-    cached_response: Dict = {}
+    cached_response: Dict = None
+
+    isCompleteUtterance: bool = True
+    rolling_prompt: str = ""  # Accumulation of the prompt fragments.
+
+    with TimerContextManager(
+        "COMPLETED UTTERANCE", logger, logging.DEBUG, "CheckCompleteUtterance"
+    ):
+        if session_id in service_agent_registry:
+            service_agent = service_agent_registry[session_id]
+        else:
+            try:
+                service_agent: YakAgent = YakServiceAgentFactory.create_from_yak_agent(
+                    yak
+                )
+                service_agent_registry[session_id] = service_agent
+            except Exception as e:
+                logger.error(f"Error during completeness check: {e} ")
+
+        isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
+            message.user_input,
+            prompt_buffer=yak.prompt_buffer,
+            service_agent=service_agent,
+            session_id=session_id,
+        )
+        logger.debug(f"IsComplete: {isCompleteUtterance}")
+
+    if not isCompleteUtterance:
+        return
+    else:
+        message.user_input = rolling_prompt
 
     if yak.usingCache and cache is not None:
         # check the cache for the key f'voice_id:::<<message.user_input>>
-        cache_key = f"{yak.voice_id}:::{cache.safe_key(message.user_input)}"
+        cache_key = cache.get_cache_key(
+            QueryType.REQUEST, yak.voice_id, message.user_input
+        )
         if has_pronouns(message.user_input) == False:
             cached_response = cache.hgetall(name=cache_key)
 
@@ -487,47 +644,139 @@ async def talk_with_avatar(message: ApiUserMessage):
             cached_stream_generator(cached_response),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
+
     else:
         # Use the LLM to get the response back.
-        TTS: AzureTextToSpeech = AzureTTSViseme(
-            voice_id=yak.voice_id,
-            audio_config=None,
-            use_blendshapes=avatar_config.blendshapes,
-        )
 
+        TTS: TextToSpeechClass = None
+
+        if yak.TextToSpeech:
+            TTS = yak.TextToSpeech
+        else:
+            TTS = AzureTTSViseme(
+                voice_id=yak.voice_id,
+                audio_config=None,
+                use_blendshapes=avatar_config.blendshapes,
+            )
+            yak.TextToSpeech = TTS
+
+        metric_logger.debug(
+            "Text_Chunk_Rx_Len_Timestamp)",
+            (f"START", datetime.now().timestamp() * 1000),
+        )
         response = Stream(yak.agent).run(message.user_input)
 
-        def stream_generator(response) -> Tuple[Any, str]:
+        def stream_generator(response) -> Generator[str, str, bytes]:
             full_text: List = []
-            for phrase in TTS.text_preprocessor(response, filter=None, use_ssml=True):
+            yielded_from_cache: bool = False
+
+            for phrase, overlap in TTS.text_preprocessor(
+                response, filter=TTS.permitted_character_regex, use_ssml=True
+            ):
                 if yak.status != YakStatus.TALKING:
-                    # When being interupted, the agent_status is be forced to YakStatus.IDLE.
+                    # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function
                     logger.info("Interrupted")
                     break
 
-                logger.debug(
-                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}"
+                metric_logger.debug(
+                    "Text_Chunk_Rx_Len_Timestamp)",
+                    (f"{len(phrase+overlap)}", datetime.now().timestamp() * 1000),
                 )
-                stream, visemes, blendshapes = TTS.audio_viseme_generator(phrase)
+                logger.debug(
+                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
+                )
+
+                response: str = ""
+                blendshapes: List = None
+                visemes: List = None
+                audio_data: bytes = (
+                    None  # Possibly compressed, depending on speech synth config
+                )
+
+                # Check in the cache for first utterance.
+                # Note: cached QueryType.Responses are only use for latency reduction and so only short utterances are cached, utterances
+                #       that are at most one text chunk long.
+                if yak.usingCache and cache:
+                    with TimerContextManager("CheckCache", logger, logger_level):
+                        (
+                            response,
+                            visemes,
+                            blendshapes,
+                            audio_data,
+                        ) = CacheUtils.get_from_cache(
+                            QueryType.RESPONSE, phrase, yak, cache
+                        )
+                    # visemes/blendshape/audio_data are all stored as lists of chunks.
+                    # However, only a single chunk is acceptabled for short utterances so all others are drpped.
+                    if audio_data and isinstance(audio_data, list):
+                        audio_data = audio_data[0]
+                        visemes = visemes[0]
+                        blendshapes = blendshapes[0]
+
+                if response == "":
+                    logger.debug(f"TextChunkSentForSynth:{phrase}")
+                    with TimerContextManager(
+                        "GenerateAudioAndVisemes",
+                        logger,
+                        logger_level,
+                        metric_name="TTS",
+                        datum_label=str(len(phrase + overlap)),
+                    ):
+                        stream, visemes, blendshapes = TTS.audio_viseme_generator(
+                            phrase, overlap
+                        )
+                    audio_data = (
+                        stream.audio_data
+                    )  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
+                    if overlap != "":
+                        # overlap only has a non-empty value if we've added extra words to fix intonation problems. This should be dropped.
+                        # boundary of words to be dropped from audio. Note that phrase is never modified with addtional words.
+                        with TimerContextManager(
+                            "TruncateFirstUtterance",
+                            logger,
+                            logging.DEBUG,
+                            "TimeToTruncateFirstUtteranceAudio",
+                            phrase,
+                        ):
+                            try:
+                                truncated_duration_ms = TTS.wordboundary_log[
+                                    int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
+                                ]
+                                with TimerContextManager(
+                                    "AudioTruncationTimer", logger, logger_level
+                                ):
+                                    audio_data = TTSUtilities.truncate_audio_byte_data(
+                                        audio_data, truncated_duration_ms
+                                    )
+                            except Exception as e:
+                                logger.error(f"Error truncating audio: {e} ")
+                    yielded_from_cache = False
+                else:
+                    yielded_from_cache = True
+
+                logger.debug(
+                    f"YEILD:(phrase, source, #B,#V, time):: {'CACHE' if yielded_from_cache else 'GENERATED'}  *{phrase}* {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
+                )
 
                 yield BlendShapesMultiPartResponse(
-                    json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+                    json.dumps(blendshapes), json.dumps(visemes), audio_data
                 ).prepare()
 
-                # Deal with caching of audio/visemes/blendshapes
-                # If using a cache then append the new data to the cache record holding all the chunks.
+                # Caching of audio/visemes/blendshapes
                 if yak.usingCache and cache is not None:
                     full_text.append(phrase)
-                    # Redis stores values as strings
+                    # Store list of chunks against full prompt
                     cache.append_to_cache(cache_key, "blendshapes", blendshapes)
                     cache.append_to_cache(cache_key, "visemes", visemes)
-                    cache.append_to_cache(cache_key, "audio", stream.audio_data)
+                    cache.append_to_cache(cache_key, "audio", audio_data)
                     logger.debug(f"Add chunks to cache")
 
-                logger.debug(f"YEILDED:(B,V):: {len(blendshapes), len(visemes)}")
-                logger.debug(
-                    f"TIMER: Yeilded audio chunk @ {datetime.now().timestamp()*1000}"
-                )
+                    if not (yielded_from_cache):
+                        # If this was generated by the TTS and its short, then cache it for latency reduction.
+                        # This duplicates the value in the cache, but short phrases are rare in natural language.
+                        CacheUtils.cache_if_short_utterance(
+                            phrase, cache, yak, audio_data, visemes, blendshapes
+                        )
 
             if yak.usingCache:
                 cache.hset(
@@ -579,14 +828,40 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
     return {"status": "error", "msg": "No prompts found", "payload": "--none--"}
 
 
-@app.post("/services/service_agent/")
-def service_agent(request: ServiceAgentRequest) -> Dict:
+@app.post("/services/local_service_agent/")
+def local_service_agent(request: LocalServiceAgentResquest) -> Dict:
     """Generic LLM model response from service_agent."""
-    service_agent: ServiceAgent = None
+
+    if not (request.session_id in service_agent_registry):
+        create_yak_service_agent(
+            ServiceAgentRequest(
+                session_id=request.session_id, business_uid=request.business_uid
+            )
+        )
+
+    service_agent: ExternalServiceAgent = service_agent_registry[request.session_id]
     response = None
     ok = False
     try:
-        service_agent: ServiceAgent = ServiceAgent(
+        response = service_agent.run(request.prompt)
+        ok = True
+    except Exception as e:
+        response = f"Error invoking local service_agent: {e}"
+        logger.error(response)
+    if ok:
+        return {"status": "success", "msg": response.output.value}
+    else:
+        return {"status": "error", "msg": response.output.value}
+
+
+@app.post("/services/service_agent/")
+def service_agent(request: ThirdPartyServiceAgentRequest) -> Dict:
+    """Generic LLM model response from service_agent."""
+    service_agent: ExternalServiceAgent = None
+    response = None
+    ok = False
+    try:
+        service_agent: ExternalServiceAgent = ExternalServiceAgent(
             task=request.task, stream=request.stream
         )  # use defaults set on server.
         response = service_agent.do_job(request.prompt)
@@ -632,7 +907,7 @@ async def upload_menu(
         )
 
     file_id = str(uuid.uuid4())
-    file_path = f"{app_config.assets.image_folder}/{file_id}{file_extension}"
+    file_path = f"{Configurations.assets.image_folder}/{file_id}{file_extension}"
 
     # create thumbnail to avoid sending large files back to client
     content = await file.read()
@@ -642,12 +917,12 @@ async def upload_menu(
     image_stream.seek(0)
     AR = raw_image.width / raw_image.height
     lower_res_size = (
-        math.floor(app_config.assets.thumbnail_image_width * AR),
-        app_config.assets.thumbnail_image_width,
+        math.floor(Configurations.assets.thumbnail_image_width * AR),
+        Configurations.assets.thumbnail_image_width,
     )
     lowres_image = raw_image.resize(lower_res_size, Image.LANCZOS)
     lowres_file_path = (
-        f"{app_config.assets.image_folder}/{file_id}_lowres{file_extension}"
+        f"{Configurations.assets.image_folder}/{file_id}_lowres{file_extension}"
     )
     lowres_image.save(lowres_file_path)
 
@@ -731,7 +1006,7 @@ async def menus_get_all(business_uid: str, for_display: bool = True):
     else:
         # Insert thumbnail image data into the menu records before sending to client.
         loaded_menus = MenuHelper.insert_images(
-            app_config, menus=menus, image_types=[ImageSelector.THUMBNAIL]
+            Configurations, menus=menus, image_types=[ImageSelector.THUMBNAIL]
         )
         if loaded_menus is None:
             return {"status": "Warning", "message": "No thumbnail menus returned."}
@@ -815,7 +1090,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
 
     ret = None
     status: bool = False
-    url: str = app_config.ocr.url
+    url: str = Configurations.ocr.url
     data = {
         "options": json.dumps(
             {
@@ -828,7 +1103,7 @@ async def menu_ocr(business_uid: str, menu_id: str):
     menu: Menu = MenuHelper.get_one_menu(
         database, business_uid=business_uid, menu_id=menu_id
     )
-    file_path = f"{app_config.assets.image_folder}/{menu_id}.png"
+    file_path = f"{Configurations.assets.image_folder}/{menu_id}.png"
 
     try:
         # Tesseract requires the file object to be passed in not the URL.
@@ -907,18 +1182,8 @@ def cafe_get_setting_options(business_uid: str, table_name: str, columns: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="/home/ubuntu/Repos/yakwith.ai/voice_chat/configs/api/configs.yaml",
-    )
-    args = parser.parse_args()
-    load_dotenv()  # load all the environment variables
-
-    app_config = OmegaConf.load(args.config_path)
-
     # Instantiate a Mongo class that provides API for pymongo interaction with mongodb.
-    database = DatabaseConfig(app_config)
+    database = DatabaseConfig(Configurations)
 
     # Redis is used for caching LLM, and TTS results for improved latency.
     if os.environ["USE_API_CACHE"]:
@@ -927,15 +1192,16 @@ if __name__ == "__main__":
         cache = None
 
     logger = logging.getLogger("YakChatAPI")
-    logger.setLevel(logging.DEBUG)
+    logger_level = logging.DEBUG
+    logger.setLevel(logger_level)
 
-    log_file_path = os.path.join(app_config.logging.root_folder, "session_logs.log")
+    log_file_path = os.path.join(Configurations.logging.root_folder, "session_logs.log")
     createIfMissing(log_file_path)
 
     file_handler = RotatingFileHandler(
         log_file_path, mode="a", maxBytes=1024 * 1024, backupCount=15
     )
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logger_level)
 
     # Create formatters and add it to handlers
     file_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
@@ -943,6 +1209,15 @@ if __name__ == "__main__":
 
     logger.addHandler(file_handler)
 
+    try:
+        # Create metric loggers.
+        metric_logger = GlobalMetrics.metric_logger
+        metric_logger.level = GlobalMetrics.LogLevel.DEBUG
+    except:
+        raise RuntimeError(
+            'Metric logger not initialized. Check that os.environ["APPLICATION_LOG_ROOT"] has been declared.'
+        )
+
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=app_config.api.port)
+    uvicorn.run(app, host="0.0.0.0", port=Configurations.api.port)

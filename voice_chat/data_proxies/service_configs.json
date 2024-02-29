@@ -4,7 +4,15 @@
       "name": "assemblyai_temp_token",
       "api_token": "27144834145e4b95947a282421fa2a1e",
       "api_endpoint" : "https://api.assemblyai.com/v2/realtime/token",
-      "duration": 6000
+      "duration": 6000,
+      "token_key_name":"token"
+    },
+    {
+      "name": "deepgram_temp_token",
+      "api_token": "Token 3c43dffa972ab8df39b0b88253773ed6fb481de6",
+      "api_endpoint" : "https://api.deepgram.com/v1/projects/d625bbca-bcee-45f6-b754-d23dc1dc47df/keys",
+      "data": {"comment":"TempToken", "scopes":["usage:write"],"tags":["testing"],"time_to_live_in_seconds":3600},
+      "token_key_name":"key"
     }
   ]
 }
