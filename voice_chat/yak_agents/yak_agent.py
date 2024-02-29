@@ -23,7 +23,7 @@ import logging
 from omegaconf import OmegaConf
 
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
-from voice_chat.data_classes import PromptAccumulator
+from voice_chat.data_classes import PromptBuffer
 from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
@@ -81,8 +81,8 @@ class YakAgent:
     )  # TODO remove. deprecated after adding mongo backend
     rules: Optional[list[str]] = field(default=Factory(list))
     user_id: Optional[str] = field(default=None)
-    prompt_accumulator: PromptAccumulator = field(
-        factory=PromptAccumulator
+    prompt_buffer: PromptBuffer = field(
+        factory=PromptBuffer
     )  # Used to collect incomplete prompts until a complete one is ready.
 
     """ Properties related to the griptape Agent """

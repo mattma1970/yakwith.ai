@@ -1,7 +1,7 @@
 name: OpenOrcaLocal
 task: text_generation
 model: http://localhost:8080
-pretrained_tokenizer: models/zephyr
+pretrained_tokenizer: models/Mistral-7B-OpenOrca
 token: DUMMY
 timeout: null
 headers:
@@ -11,7 +11,8 @@ stream: True
 stream_chunk_size: 5
 params:
   stop_sequences:
-  - </s>
+  - <|im_end|>
+  - <|im_start|>
   max_new_tokens: 2000
-  temperature: 0.6
+  temperature: 0.2
   stream: ${..stream}

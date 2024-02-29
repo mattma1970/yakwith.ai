@@ -40,9 +40,9 @@ def to_provider(value):
 
 
 @define
-class ServiceAgent:
+class ExternalServiceAgent:
     """
-    A non-business specific LLM model for misc LLM-powered functions such as menu merging and correcting.
+    Misc 3rd-party-LLM-powered non-conversation functions such as processing and cleaning OCR data.
     Supports streaming
 
     @args:
@@ -70,7 +70,7 @@ class ServiceAgent:
                 self.agent = Agent(
                     memory=None,
                     prompt_driver=OpenAiChatPromptDriver(
-                        temperature=0.8,
+                        temperature=0.4,
                         model=self.model,
                         api_key=os.environ["OPENAI_API_KEY"],
                         stream=self.stream,
@@ -100,5 +100,5 @@ class ServiceAgent:
 
 
 if __name__ == "__main__":
-    agent = ServiceAgent(provider="OPENAI")
+    agent = ExternalServiceAgent(provider="OPENAI")
     print(agent.do_job("How many horns are there in a herd of 7 unicorns?"))

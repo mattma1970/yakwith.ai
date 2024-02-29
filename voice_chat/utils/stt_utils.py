@@ -3,8 +3,8 @@ import re, json
 from typing import Dict, List, Any, Union, Tuple
 import logging
 import io, os
-from voice_chat.yak_agents.service_agent import Task
-from voice_chat.yak_agents import YakAgent
+from voice_chat.yak_agents.external_service_agent import Task
+from voice_chat.yak_agents import YakServiceAgent, ExternalServiceAgent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class STTUtilities:
         input_text: str,
         prompt_template: str = "",
         getJSON=True,
-        service_agent: YakAgent = None,
+        service_agent: YakServiceAgent = None,
     ):
         """
         Use the current LLM to checvk if the text that was sent was a complete thought and hence should be replied to with a direct response.
@@ -26,13 +26,15 @@ class STTUtilities:
             prompt_template: str: prompt with placeholder for text. If empty, the default prompt template below is used.
             getJSON: bool: the response from the model is assumed to be json.
         @returns:
-            answer, possible in json format.
+            Dict: 'answer':<bool>,'reason': rationale for the answer.
 
         Note: from early experiments, requiring a rationale for the answer leads to materially better results than just asking for a yes not response.
         """
         if prompt_template.strip() == "":
-            prompt_template = """Does the Statement, quoted below, makes sense if it were spoken to a restaurant waiter. You must ignore spelling mistakes and words that could be a food item.
-                                    Answer in json format with the following schema {{'answer': a boolean indicating whether the sentance makes sense, 'reason': a 6 word explaination of your reasoning}}.  Statement:'{input_text}'"""
+            prompt_template = f"""You are a waiter at a restaurant. Does the following statement make sense to you, ignore spelling mistakes 
+                                and things that might be food or beverage items even if its not a common item:\n
+                                '{input_text}'?\n
+                                First answer with 'yes' or 'no' only and then give an explanation of your answer in less than 6 words"""
 
             prompt: str = prompt_template.replace("{input_text}", input_text)
 
@@ -40,15 +42,26 @@ class STTUtilities:
         ret: Dict = {}
         try:
             # use defaults set on server.
-            response = service_agent.run(prompt)
+            if isinstance(service_agent, YakServiceAgent):
+                response = service_agent.run(prompt)
+                response_text = response.output.value.strip()
+            elif isinstance(service_agent, ExternalServiceAgent):
+                if service_agent.stream == True:
+                    raise RuntimeError(
+                        "Streaming external service agents are not supported by isCompleteThought"
+                    )
+                response_text = service_agent.do_job(prompt)
+            if getJSON:
+                try:
+                    ret = {
+                        "answer": False if "no" in response_text[:3].lower() else True,
+                        "reason": response.output.value,
+                    }
+                except:
+                    logger.error("Invalid json returned from completeness check")
+            else:
+                raise RuntimeWarning("IsCompleteThought only support JSON responses.")
         except Exception as e:
             ret = {}
             logger.error(f"Error in isCompleteThought: {e}")
-        if getJSON:
-            try:
-                ret = json.loads(response.output.value)
-            except:
-                logger.error("Invalid json returned from completeness check")
-        else:
-            raise RuntimeWarning("IsCompleteThought only support JSON responses.")
         return ret

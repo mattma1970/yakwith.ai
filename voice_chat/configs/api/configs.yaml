@@ -1,4 +1,7 @@
 api:
+  cors_urls: 
+   - https://app.yakwith.ai
+   - https://dev.d2civivj65v1p0.amplifyapp.com
   port: 8884  # Port that fastAPI runs on
 
 # Credentials stored in .env
@@ -17,9 +20,13 @@ assets:
 
 logging: 
   root_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs
+  metric_logs_folder: /home/mtman/Documents/Repos/yakwith.ai/voice_chat/logs/metrics
 
 ocr:
   url: http://localhost:8885/tesseract # Must ensure this matches the port specified in the environment variables used by docker-compose.
 
 text_to_speech:
-  default_voice_id: en-AU-KimNeural   # for Azure TextToSpeech 
+  default_voice_id: en-AU-KimNeural   # for Azure TextToSpeech
+
+nlp:
+  max_length_of_prompt_buffer: 5 # The number of prompt fragments that, when reached, should be sent to the LLM. 

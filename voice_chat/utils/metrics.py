@@ -8,6 +8,7 @@ from voice_chat.utils.text_processing import safe_key
 from voice_chat.utils.file import createIfMissing
 import logging
 
+import voice_chat.configs.AppConfig as AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,11 @@ logger = logging.getLogger(__name__)
 class LogLevel(Enum):
     INFO = 0
     DEBUG = 1
+
+
+class MetricType(Enum):
+    POINT = 0
+    INTERVAL = 1
 
 
 @define
@@ -29,6 +35,7 @@ class Metric:
     level: LogLevel = field(default=LogLevel.DEBUG)
     enabled: bool = field(default=True)
     data: list[Tuple] = field(factory=list)
+    type: MetricType = field(default=MetricType.POINT)
 
     def __len__(self):
         return len(self.data)
@@ -129,11 +136,13 @@ class MetricLogManager:
     def __attrs_post_init__(self):
         self.prefix = self.random_prefix(5) + "_"
 
-    def create_metric(self, name: str, level: LogLevel):
+    def create_metric(
+        self, name: str, level: LogLevel, type: MetricType = MetricType.POINT
+    ):
         if safe_key(name) in self.metrics:
             logger.error(f"Metric Name {name} already in use.")
             return
-        metric: Metric = Metric(name=name, level=level)
+        metric: Metric = Metric(name=name, level=level, type=type)
         self.metrics[safe_key(name)] = metric
         self.last_dump_index[safe_key(name)] = 0
 
@@ -198,8 +207,9 @@ class MetricLogManager:
                     ",".join(list(map(lambda x: str(x), datum)))
                     for datum in self.metrics[safe_key(metric_name)][start_index:]
                 ]
-                data = "\n".join(output)
-                f.write(data + "\n")
+                if len(output) > 0:
+                    data = "\n".join(output)
+                    f.write(data + "\n")
             # Update the pointer to the last element exported
             self.last_dump_index[safe_key(metric_name)] = len(
                 self.metrics[safe_key(metric_name)]
@@ -273,5 +283,5 @@ class MetricLogManager:
 
 
 metric_logger = MetricLogManager(
-    path=os.environ["APPLICATION_METRIC_LOG_ROOT"]
+    path=AppConfig.Configurations.logging.metric_logs_folder
 )  # TODO make this a singleton object.
