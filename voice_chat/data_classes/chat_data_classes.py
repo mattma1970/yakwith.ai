@@ -217,6 +217,7 @@ class MultiPartResponse:
 class BlendShapesMultiPartResponse:
     """Use for sending metadata and audio"""
 
+    request_uid: str
     blendshapes: str
     json_data: str
     audio_bytes: bytes
@@ -228,7 +229,7 @@ class BlendShapesMultiPartResponse:
         """
         return string with boundary markers and data.
         """
-        return f"""--{self.boundary}\r\nContent-Type: application/json\r\nType: blendshapes\r\n\r\n{self.blendshapes}\r\n{self.boundary}
-                   --{self.boundary}\r\nContent-Type: application/json\r\nType: visemes\r\n\r\n{self.json_data}\r\n{self.boundary}
-                    --{self.boundary}\r\nContent-Type: audio/mpeg\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}
+        return f"""--{self.boundary}\r\nContent-Type: application/json\r\nType: blendshapes\r\nID: {self.request_uid}\r\n\r\n{self.blendshapes}\r\n{self.boundary}
+                   --{self.boundary}\r\nContent-Type: application/json\r\nType: visemes\r\nID: {self.request_uid}\r\n\r\n{self.json_data}\r\n{self.boundary}
+                    --{self.boundary}\r\nContent-Type: audio/mpeg\r\nID: {self.request_uid}\r\n\r\n {base64.b64encode(self.audio_bytes).decode('utf-8')}
                 """

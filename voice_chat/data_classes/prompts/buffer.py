@@ -44,16 +44,17 @@ class PromptBuffer:
         self.prompt_buffer = []
 
     def refresh_accumulator(self):
-        """remove expired prompt chunks."""
+        """remove expired prompt chunks. Capitalize first chunks beginning."""
         self.prompt_buffer = [
             prompt
             for prompt in self.prompt_buffer
             if prompt["expiration"] > datetime.now()
         ]
         if len(self.prompt_buffer) > 0:
-            self.prompt_buffer[0]["chunk"][0] = self.prompt_buffer[0]["chunk"][
-                0
-            ].upper()
+            self.prompt_buffer[0]["chunk"] = (
+                self.prompt_buffer[0]["chunk"][0].upper()
+                + self.prompt_buffer[0]["chunk"][1:]
+            )
 
     @property
     def prompt(self):
