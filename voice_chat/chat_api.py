@@ -61,7 +61,7 @@ from voice_chat.data_classes.api import (
 
 from voice_chat.data_classes import PromptManager
 
-from voice_chat.data_classes.chat_data_classes import (
+from voice_chat.data_classes import (
     StdResponse,
     MultiPartResponse,
     BlendShapesMultiPartResponse,
@@ -193,7 +193,7 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
 
 
 @app.post("/agent/create/service_agent")
-def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
+async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
     """
     Create and register a YakServiceAgent with the service_agent_registry.
     YakAgent configured for utilities functions such as assessing if an utterance is completed.
@@ -215,7 +215,7 @@ def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
         # Get the locally configured Service Agent model
         cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
         model_choice: ModelChoice = ModelHelper.get_model_by_id(
-            database, cafe.model
+            database, cafe.service_model
         )  # TODO allow an alternative model to be specified.
 
         if not config.session_id in service_agent_registry:
@@ -596,9 +596,11 @@ async def talk_with_avatar(message: ApiUserMessage):
             service_agent = service_agent_registry[session_id]
         else:
             try:
-                service_agent: YakServiceAgent = (
-                    YakServiceAgentFactory.create_from_yak_agent(yak)
+                # service_agent: YakServiceAgent = YakServiceAgentFactory.create_from_yak_agent(yak)
+                service_agent: YakServiceAgent = YakServiceAgentFactory.create(
+                    yak.business_uid, database=database
                 )
+
                 service_agent_registry[session_id] = service_agent
             except Exception as e:
                 logger.error(f"Error during completeness check: {e} ")
@@ -816,7 +818,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
 
 @app.get("/agent/interrupt/{session_id}")
-def agent_interrupt(session_id: str):
+async def agent_interrupt(session_id: str):
     """Change the agent_status. If set to IDLE, this will interrupt the speech generation in the talk_with_{agent|avatar} endpoints."""
     logger.info(f"Speech interupted: session_id {session_id}")
     yak: YakAgent = agent_registry[session_id]
@@ -850,7 +852,7 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 
 
 @app.post("/services/yak_service_agent/")
-def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict:
+async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict:
     """Generic LLM model response from service_agent."""
 
     if not (request.session_id in service_agent_registry):

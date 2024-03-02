@@ -126,23 +126,28 @@ class AzureTextToSpeech(TextToSpeechClass):
                 if len(text_accumulator) < phrase_end_index:
                     continue
                 # Else be greedy with the text size.
+                match_was_found: bool = False
                 for sentence_break_regex in TTSUtilities.get_sentance_break_regex():
                     for match in re.finditer(sentence_break_regex, text_accumulator):
                         # Get the last natural break position over all the sentance markers
                         if match and match.start() > phrase_end_index:
                             phrase_end_index = match.start()
+                            match_was_found = True
 
-                phrase, overlap, remainder = (
-                    text_accumulator[:phrase_end_index],
-                    "",
-                    text_accumulator[phrase_end_index:],
-                )
+                if match_was_found:
+                    phrase, overlap, remainder = (
+                        text_accumulator[:phrase_end_index],
+                        "",
+                        text_accumulator[phrase_end_index:],
+                    )
+                else:
+                    continue
                 # If the phrase index hasn't moved then continue collecting text chunks.
-                if (
+                """ if (
                     phrase_end_index
                     == os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
                 ):
-                    continue
+                    continue """
 
             if phrase.strip() != "":  # if sentence only have \n or space, we could skip
                 preprocessed_phrase = TTSUtilities.prepare_for_synthesis(

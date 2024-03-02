@@ -29,4 +29,4 @@ text_to_speech:
   default_voice_id: en-AU-KimNeural   # for Azure TextToSpeech
 
 nlp:
-  max_length_of_prompt_buffer: 5 # The number of prompt fragments that, when reached, should be sent to the LLM. 
+  max_length_of_prompt_buffer: 2 # The number of prompt fragments that, when reached, should be sent to the LLM. 

@@ -14,6 +14,9 @@ YakServiceAgents are intended to be cached (service_agent_registry) rather than 
 import logging
 from voice_chat.yak_agents import YakAgent
 from voice_chat.data_classes.data_models import ModelChoice
+from voice_chat.data_classes.mongodb import DatabaseConfig
+from voice_chat.data_classes import MenuHelper, Cafe
+from voice_chat.data_classes.mongodb import ModelHelper
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +30,26 @@ class YakServiceAgent(YakAgent):
 
 class YakServiceAgentFactory:
     @classmethod
-    def create(cls, business_uid: str, model_choice: ModelChoice) -> YakServiceAgent:
+    def create(
+        cls,
+        business_uid: str,
+        model_choice: ModelChoice = None,
+        database: DatabaseConfig = None,
+    ) -> YakServiceAgent:
+        """
+        Overloaded function to create a YakServiceAgent.
+        If ModelChoice is not provided, then the services_model in the database is used as the service model.
+        """
         service_agent: YakServiceAgent = None
 
         logger.info(f"Creating service agent for: {business_uid}")
+        if model_choice == None and database != None:
+            # Get the locally configured Service Agent model
+            cafe: Cafe = MenuHelper.get_cafe(database, business_uid)
+            model_choice: ModelChoice = ModelHelper.get_model_by_id(
+                database, cafe.services_model
+            )  # TODO allow an alternative model to be specified.
+
         try:
             service_agent = YakServiceAgent(
                 business_uid=business_uid,
@@ -50,6 +69,7 @@ class YakServiceAgentFactory:
 
     @classmethod
     def create_from_yak_agent(cls, yak) -> YakServiceAgent:
+        """Create a service agent using the same model (and its settings) as used by the yak conversation agent."""
         service_agent: YakServiceAgent = None
         try:
             service_agent = YakServiceAgentFactory.create(
