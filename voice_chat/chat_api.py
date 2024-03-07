@@ -703,7 +703,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     (f"{len(phrase+overlap)}", datetime.now().timestamp() * 1000),
                 )
                 logger.debug(
-                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
+                    f"TIMER: r_id: {request_uid} text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
                 )
 
                 response: str = ""
@@ -1075,7 +1075,7 @@ def menus_get_as_options(business_uid: str, encoded_utc_time: str):
                         or utc_time.time() >= menu.valid_time_range["start"].time()
                     ):
                         default_menu_id = menu.menu_id
-                        break
+                        # break
                 else:  # same day
                     if (
                         utc_time.time() <= menu.valid_time_range["end"].time()

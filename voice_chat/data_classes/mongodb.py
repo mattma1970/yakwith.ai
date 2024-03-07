@@ -156,7 +156,7 @@ class MenuHelper:
                                     image_file.read()
                                 ).decode("utf-8")
                 except Exception as e:
-                    logger.error("Failed to insert images into menu object: {e}")
+                    logger.error(f"Failed to insert images into menu object: {e}")
 
                 if isinstance(menus, Menu):
                     """If only a single Menu was passed in then return a Menu object"""
