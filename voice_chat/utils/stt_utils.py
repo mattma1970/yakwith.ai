@@ -39,7 +39,7 @@ class STTUtilities:
             prompt: str = prompt_template.replace("{input_text}", input_text)
 
         response: str = None
-        ret: Dict = {}
+        ret: Dict = {"answer": True, "reason": "Default"}
         try:
             # use defaults set on server.
             if isinstance(service_agent, YakServiceAgent):
@@ -51,12 +51,15 @@ class STTUtilities:
                         "Streaming external service agents are not supported by isCompleteThought"
                     )
                 response_text = service_agent.do_job(prompt)
+            else:
+                logger.error(
+                    f"No service agent found or service agent type {type(service_agent)} isn"
+                    "t supported for isCompleteThought."
+                )
             if getJSON:
                 try:
-                    ret = {
-                        "answer": False if "no" in response_text[:3].lower() else True,
-                        "reason": response.output.value,
-                    }
+                    ret["answer"] = False if "no" in response_text[:3].lower() else True
+                    ret["reason"] = response.output.value
                 except:
                     logger.error("Invalid json returned from completeness check")
             else:

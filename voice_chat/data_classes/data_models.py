@@ -106,6 +106,7 @@ class Cafe:
     menus: Optional[List[Menu]] = field(default_factory=list)
     notes: Optional[str] = ""
     model: str = "none"
+    services_model: Optional[str] = "none"
 
     def to_dict(self):
         # Convert Cafe instance to dictionary
@@ -117,6 +118,7 @@ class Cafe:
             "menus": [menu.to_dict() for menu in self.menus],
             "notes": self.notes,
             "model": self.model,
+            "services_model": self.services_model,
         }
 
     @classmethod
@@ -131,6 +133,7 @@ class Cafe:
             menus=[Menu.from_dict(menu_data) for menu_data in data.get("menus", [])],
             notes=data.get("notes", ""),
             model=data.get("model"),
+            services_model=data.get("services_model"),
         )
 
 
@@ -142,7 +145,7 @@ class ModelChoice:
     name: str = field(default="")
     config: List[Union[Dict]] = field(default_factory=list)
     provider: str = field(default="")
-    driver_file_name: Optional[str] = field(default="")
+    driver_file_name: str = field(default="")
 
     @classmethod
     def from_dict(cls, data: Dict):

@@ -46,6 +46,7 @@ from voice_chat.yak_agents import (
     ExternalServiceAgent,
     Task,
     YakServiceAgentFactory,
+    YakServiceAgent,
 )
 
 from voice_chat.data_classes.api import (
@@ -60,7 +61,7 @@ from voice_chat.data_classes.api import (
 
 from voice_chat.data_classes import PromptManager
 
-from voice_chat.data_classes.chat_data_classes import (
+from voice_chat.data_classes import (
     StdResponse,
     MultiPartResponse,
     BlendShapesMultiPartResponse,
@@ -85,6 +86,7 @@ from voice_chat.utils import TimerContextManager
 from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
+from voice_chat.utils import get_uid
 from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
@@ -130,7 +132,7 @@ service_agent_registry = defaultdict(
 )  # For LLM subclasses that do misc tasks like checking for sentance completeness.
 
 
-def my_gen(response: Iterator[TextArtifact]) -> str:
+def my_gen(response: Iterator[TextArtifact]) -> Generator:
     for chunk in response:
         yield chunk.value
 
@@ -191,12 +193,12 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
 
 
 @app.post("/agent/create/service_agent")
-def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
+async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
     """
-    Create and register a localservice_agent: LLM agent used for utilities functions such as assessing if an utterance is completed. These can use either a
-    local or a 3rdparty API. Unlike YakAgents that power avatars these agents are intended to provide short, quick responses and do not have conversation memory.
-    The model used is
-    This endpoint creates a service agent and registers it save it to the agent_registry.
+    Create and register a YakServiceAgent with the service_agent_registry.
+    YakAgent configured for utilities functions such as assessing if an utterance is completed.
+    Unlike YakAgents that power avatars these agents are intended to provide short, quick responses and do not have
+    conversation memory and do not support streaming.
     Arguments:
         business_uid: unique id for the cafe.
         session_uid:
@@ -213,11 +215,11 @@ def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
         # Get the locally configured Service Agent model
         cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
         model_choice: ModelChoice = ModelHelper.get_model_by_id(
-            database, cafe.model
+            database, cafe.service_model
         )  # TODO allow an alternative model to be specified.
 
         if not config.session_id in service_agent_registry:
-            service_agent = YakServiceAgent(
+            service_agent = YakServiceAgentFactory.create(
                 config.business_uid, config.session_id, model_choice
             )
             if service_agent:
@@ -402,6 +404,8 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         visemes and audio data.
     """
     logger.info(f"Request for /get_agent_to_say : {message.user_input}")
+    request_uid: str = get_uid()
+
     # Retrieve the Agent (and agent memory) if session already underway
     session_id: str = message.session_id
     if session_id not in agent_registry:
@@ -429,7 +433,10 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
             for i in range(len(visemes)):
                 yield BlendShapesMultiPartResponse(
-                    json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
+                    request_uid,
+                    json.dumps(blendshapes[i]),
+                    json.dumps(visemes[i]),
+                    audio[i],
                 ).prepare()
 
         return StreamingResponse(
@@ -454,9 +461,14 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
                 "SAY: GenerateAudioAndVisemes", logger, logging.DEBUG
             ):
                 stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+
             yield BlendShapesMultiPartResponse(
-                json.dumps(blendshapes), json.dumps(visemes), stream.audio_data
+                request_uid,
+                json.dumps(blendshapes),
+                json.dumps(visemes),
+                stream.audio_data,
             ).prepare()
+
             # Cache first utterances if cache is in use
             if yak.usingCache and cache:
                 CacheUtils.cache_if_short_utterance(
@@ -548,8 +560,9 @@ async def talk_with_avatar(message: ApiUserMessage):
     logger.debug(
         f"User input received: {message.user_input} @ {datetime.now().timestamp()*1000}"
     )
-
-    logger.debug(f"TIMER: Recieved text request @ {datetime.now().timestamp()*1000}")
+    request_uid: str = (
+        get_uid()
+    )  # Unique label for the request. Used to deal with request collections at the client-side
 
     session_id: str = message.session_id
     if session_id not in agent_registry:
@@ -571,8 +584,10 @@ async def talk_with_avatar(message: ApiUserMessage):
     cache_key: str = ""
     cached_response: Dict = None
 
-    isCompleteUtterance: bool = True
     rolling_prompt: str = ""  # Accumulation of the prompt fragments.
+
+    # Check if the prompt recieved is a completed thought.
+    isCompleteUtterance: bool = True
 
     with TimerContextManager(
         "COMPLETED UTTERANCE", logger, logging.DEBUG, "CheckCompleteUtterance"
@@ -581,9 +596,11 @@ async def talk_with_avatar(message: ApiUserMessage):
             service_agent = service_agent_registry[session_id]
         else:
             try:
-                service_agent: YakAgent = YakServiceAgentFactory.create_from_yak_agent(
-                    yak
+                # service_agent: YakServiceAgent = YakServiceAgentFactory.create_from_yak_agent(yak)
+                service_agent: YakServiceAgent = YakServiceAgentFactory.create(
+                    yak.business_uid, database=database
                 )
+
                 service_agent_registry[session_id] = service_agent
             except Exception as e:
                 logger.error(f"Error during completeness check: {e} ")
@@ -629,7 +646,10 @@ async def talk_with_avatar(message: ApiUserMessage):
                     break
 
                 yield BlendShapesMultiPartResponse(
-                    json.dumps(blendshapes[i]), json.dumps(visemes[i]), audio[i]
+                    request_uid,
+                    json.dumps(blendshapes[i]),
+                    json.dumps(visemes[i]),
+                    audio[i],
                 ).prepare()
 
             yak.status = YakStatus.IDLE
@@ -683,7 +703,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     (f"{len(phrase+overlap)}", datetime.now().timestamp() * 1000),
                 )
                 logger.debug(
-                    f"TIMER: text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
+                    f"TIMER: r_id: {request_uid} text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
                 )
 
                 response: str = ""
@@ -759,7 +779,10 @@ async def talk_with_avatar(message: ApiUserMessage):
                 )
 
                 yield BlendShapesMultiPartResponse(
-                    json.dumps(blendshapes), json.dumps(visemes), audio_data
+                    request_uid,
+                    json.dumps(blendshapes),
+                    json.dumps(visemes),
+                    audio_data,
                 ).prepare()
 
                 # Caching of audio/visemes/blendshapes
@@ -795,7 +818,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
 
 @app.get("/agent/interrupt/{session_id}")
-def agent_interrupt(session_id: str):
+async def agent_interrupt(session_id: str):
     """Change the agent_status. If set to IDLE, this will interrupt the speech generation in the talk_with_{agent|avatar} endpoints."""
     logger.info(f"Speech interupted: session_id {session_id}")
     yak: YakAgent = agent_registry[session_id]
@@ -828,8 +851,8 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
     return {"status": "error", "msg": "No prompts found", "payload": "--none--"}
 
 
-@app.post("/services/local_service_agent/")
-def local_service_agent(request: LocalServiceAgentResquest) -> Dict:
+@app.post("/services/yak_service_agent/")
+async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict:
     """Generic LLM model response from service_agent."""
 
     if not (request.session_id in service_agent_registry):
@@ -1052,7 +1075,7 @@ def menus_get_as_options(business_uid: str, encoded_utc_time: str):
                         or utc_time.time() >= menu.valid_time_range["start"].time()
                     ):
                         default_menu_id = menu.menu_id
-                        break
+                        # break
                 else:  # same day
                     if (
                         utc_time.time() <= menu.valid_time_range["end"].time()

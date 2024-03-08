@@ -104,6 +104,10 @@ class AzureTextToSpeech(TextToSpeechClass):
             text_accumulator += phrase  # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
             self.full_message += phrase  # For caching etc.
 
+            # If chunk has no speakable content the skip (ie. if its only punctuation or spaces etc)
+            if bool(re.match(r"^\W+$", phrase)):
+                continue
+
             phrase, overlap, remainder = "", "", ""
 
             if is_first_sentance:
@@ -126,23 +130,28 @@ class AzureTextToSpeech(TextToSpeechClass):
                 if len(text_accumulator) < phrase_end_index:
                     continue
                 # Else be greedy with the text size.
+                match_was_found: bool = False
                 for sentence_break_regex in TTSUtilities.get_sentance_break_regex():
                     for match in re.finditer(sentence_break_regex, text_accumulator):
                         # Get the last natural break position over all the sentance markers
                         if match and match.start() > phrase_end_index:
                             phrase_end_index = match.start()
+                            match_was_found = True
 
-                phrase, overlap, remainder = (
-                    text_accumulator[:phrase_end_index],
-                    "",
-                    text_accumulator[phrase_end_index:],
-                )
+                if match_was_found:
+                    phrase, overlap, remainder = (
+                        text_accumulator[:phrase_end_index],
+                        "",
+                        text_accumulator[phrase_end_index:],
+                    )
+                else:
+                    continue
                 # If the phrase index hasn't moved then continue collecting text chunks.
-                if (
+                """ if (
                     phrase_end_index
                     == os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
                 ):
-                    continue
+                    continue """
 
             if phrase.strip() != "":  # if sentence only have \n or space, we could skip
                 preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
@@ -151,7 +160,7 @@ class AzureTextToSpeech(TextToSpeechClass):
                 yield preprocessed_phrase, overlap
                 text_accumulator = remainder.lstrip()  # Keep the remaining text
 
-        if text_accumulator != "":
+        if text_accumulator != "" and not bool(re.match(r"^\W+$", text_accumulator)):
             logger.debug(f"Text for synth flushed:{text_accumulator}")
             preprocessed_phrase = TTSUtilities.prepare_for_synthesis(
                 filter, use_ssml, text_accumulator

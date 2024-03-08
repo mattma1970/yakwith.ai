@@ -14,6 +14,9 @@ YakServiceAgents are intended to be cached (service_agent_registry) rather than 
 import logging
 from voice_chat.yak_agents import YakAgent
 from voice_chat.data_classes.data_models import ModelChoice
+from voice_chat.data_classes.mongodb import DatabaseConfig
+from voice_chat.data_classes import MenuHelper, Cafe
+from voice_chat.data_classes.mongodb import ModelHelper
 
 logger = logging.getLogger(__name__)
 
@@ -21,21 +24,34 @@ logger = logging.getLogger(__name__)
 class YakServiceAgent(YakAgent):
     """For typing purposes"""
 
-    def __init__(self):
-        super(YakServiceAgent, self).__init__()
-
-    pass
+    def __init__(self, **kwargs):
+        super(YakServiceAgent, self).__init__(**kwargs)
 
 
 class YakServiceAgentFactory:
-
-    def create(cls, business_uid: str, model_choice: ModelChoice) -> YakServiceAgent:
-
-        service_agent: YakAgent = None
+    @classmethod
+    def create(
+        cls,
+        business_uid: str,
+        model_choice: ModelChoice = None,
+        database: DatabaseConfig = None,
+    ) -> YakServiceAgent:
+        """
+        Overloaded function to create a YakServiceAgent.
+        If ModelChoice is not provided, then the services_model in the database is used as the service model.
+        """
+        service_agent: YakServiceAgent = None
 
         logger.info(f"Creating service agent for: {business_uid}")
+        if model_choice == None and database != None:
+            # Get the locally configured Service Agent model
+            cafe: Cafe = MenuHelper.get_cafe(database, business_uid)
+            model_choice: ModelChoice = ModelHelper.get_model_by_id(
+                database, cafe.services_model
+            )  # TODO allow an alternative model to be specified.
+
         try:
-            service_agent = YakAgent(
+            service_agent = YakServiceAgent(
                 business_uid=business_uid,
                 stream=False,
                 model_choice=model_choice,
@@ -44,16 +60,21 @@ class YakServiceAgentFactory:
             logger.info(f"Ok. Created service agent for llm:{model_choice.name}")
             ok = True
         except Exception as e:
-            msg = f"A problem occured while creating a local service agent: {e}"
+            msg = (
+                f"{__name__}: A problem occured while creating a yak service agent: {e}"
+            )
             logger.error(msg)
 
         return service_agent
 
     @classmethod
     def create_from_yak_agent(cls, yak) -> YakServiceAgent:
-        service_agent: YakAgent = None
+        """Create a service agent using the same model (and its settings) as used by the yak conversation agent."""
+        service_agent: YakServiceAgent = None
         try:
-            service_agent = YakServiceAgent.create(yak.business_uid, yak.model_choice)
+            service_agent = YakServiceAgentFactory.create(
+                yak.business_uid, yak.model_choice
+            )
             ok = True
         except Exception as e:
             msg = f"A problem occured while creating a yak_agent: {e}"
