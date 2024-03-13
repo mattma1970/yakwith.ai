@@ -14,5 +14,5 @@ params:
   - <|im_end|>
   - <|im_start|>
   max_new_tokens: 2000
-  temperature: 0.6
+  temperature: 0.4
   stream: ${..stream}
