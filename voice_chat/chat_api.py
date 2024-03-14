@@ -1233,7 +1233,7 @@ if __name__ == "__main__":
     logger.addHandler(file_handler)
 
     try:
-        # Create metric loggers.
+        # Create metric loggers which allows metrics and their summary stats to be generated for insturmented functions.
         metric_logger = GlobalMetrics.metric_logger
         metric_logger.level = GlobalMetrics.LogLevel.DEBUG
     except:

@@ -13,3 +13,13 @@ def createIfMissing(file_name: Union[str, os.PathLike]) -> bool:
             f.write(datetime.now().strftime("%m/%d/%Y, %H:%M:%S"))
             f.write("\n==========================\n\r\n\r")
         return False
+
+
+@staticmethod
+def createFolderIfMissing(folder_name: Union[str, os.PathLike]) -> bool:
+    folder_name = folder_name.rstrip("/") + "/"
+    if os.path.exists(path=folder_name):
+        return True
+    else:
+        os.makedirs(os.path.dirname(folder_name), exist_ok=True)
+        return False
