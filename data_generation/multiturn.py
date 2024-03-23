@@ -133,7 +133,26 @@ rules = [
     """ You do not make up answers about the menu if the item is not on the menu.
          If there are any options listed explicitly or implicitly in the menu item then you must let the customer know the options available and ask which one they would like. The options might be indicated by the word 'or' or listed in the 'other' section, or implicitly, by the appearance of more than one price option for a drink which corresponds to small and large size (e.g $4 / $5.5 means small size if $4 and $5.5 is large size).
          If the customer hasn't added a drink to their order then you should ask if they'd like anything to drink. If they have only ordered a drink then ask if they would like any food.
-         You are a polite but do not be too friendly or excited."""
+         You are a polite but do not be too friendly or excited.""",
+    """
+You are a waiter in a casual restaurant. Your JOB is to navigate towards a specified GOAL. The goal is to sell a meal containing food and drinks from the following MENU included below and in json format.
+
+In the process you NEED to evaluate the current conversation HISTORY and determine which stage the discussion is on. Based on the discussion, you need to answer the QUESTION and provide a follow-up question.
+
+ALWAYS check the history and use as a reference while answering the QUESTION.
+
+Your GOAL path is as below:
+
+1. If the customer greets you, you greet them back and ask what what they would like to have today.
+2. If a customer makes a statement instead of asking a question then their statement is an answer to the last question you asked. 
+3. If a customer asks about a menu item, answer their question briefly and ask if they would like it.
+4. If a custom orders an menu item and that menu item has some options, then you must tell them the options and ask which option they’d like to order. 
+5. If a menu item is a beverage and that item has multiple prices listed in the menu then you can assume that the prices relate to different size options of small and large.
+6. If a customer has only ordered food then you must ask if they would like a drink with that. 
+7. If a customer has only ordered a drink they you must ask if they would like any food with that. 
+
+Always read the customers order back to them at the end, including and changes they made, and tell them the total price.
+""",
 ]
 menu = """
 {
@@ -464,9 +483,10 @@ def sample_menu(
 system_prompts = [
     f"You are a casual waiter in a restaurant. Your job is to collect food and drink orders from customers and answer their questions. Your first task is to create a dialog dataset based on the FULL_MENU provided below, in json format, for plausible conversations with customers. ###rules### \r\n",
     f"You are a synthetic data generator for multiturn Dialogs between a waiter in a restaurant and a customer. Your task is to generate realistic Dialogs between a waiter and a customer while the customer is making their order, enquiring about menu items or asking for modifications to menu items available in the FULL_MENU included below. ###rules###\r\n",
+    f"Your task is to create a dialog dataset for conversations between a waiter and a customer when ordering from the FULL_MENU provided below, in json format. You must generate plausible conversations with customers by following these RULES.\n RULES:###rules### \r\n",
 ]
 
-system_prompt = system_prompts[1]
+system_prompt = system_prompts[2]
 
 instruction_library = [
     """FULL_MENU : ###menu###\r\n
@@ -483,9 +503,16 @@ instruction_library = [
         'final_order': a list of dictionaries with 3 keys: 'name' the name of the menu item ordered, 'variation': variations to that menu item, if any, 'price' the total price for that menu item including any charges for the variations or special requests for that meny item.
         </schema>
         """,
+    """FULL_MENU : ###menu###\r\n
+        In this Dialog the customer ###ask###. Each complete Dialog will be recorded in JSON format using the schema described below and between the <schema> ... </schema> tags, where the description in the value for a key contains instructions for generating that value. You must generate ###repeats### Dialogs. Return the dialogs as a list of strings using the format [Dialog1,Dialog2,...]. This is not markup or markdown so the first character returned should be the opening quare bracket of the list.
+        <schema>
+        'menu': ###menu_id### a placeholder value that can be ignored, 
+        'conversation': a list of less than 10 conversation turns between the customer and you, the waiter, where the customer ###ask### during the conversation. This value should be in json format where each turn in the conversation has 3 keys: 'customer' and 'waiter' which record the response from that person; and 'menu_actions': a list of dictionaries, each with the following 3 keys: 'action' a string from the list ["add","remove","update, "none"] where 'add' indicates the customer has asked to add menu item, not an ingredient of a menu item, to the order and even if they have not finalized the choices for that menu item,'remove' means the customer has asked to remove a menu item (not an ingredient) and 'update' means the customer has selected an option for menu item or requested an ingredient of a menu item to be varied, otherwise 'none', 'menu_item': the menu item which the menu_action relates when menu_item is not none, otherwise set this to none; and 'variation': the requested change and the ingredient, size or special request from the customer when menu_action value update.
+        </schema>
+        """,
 ]
 
-instructions = [instruction_library[1]]
+instructions = [instruction_library[2]]
 
 asks = [
     "asks for one food item",
@@ -517,7 +544,7 @@ for instruction_idx in range(len(instructions)):
         ## replace rules and asks
         menu_prefix, menu = sample_menu(4, 3)
         current_prompt = (
-            system_prompt.replace("###rules###", rules[0])
+            system_prompt.replace("###rules###", rules[1])
             + "\r\n\r\n"
             + instructions[instruction_idx]
             .replace("###menu###", menu)

@@ -31,10 +31,14 @@ class STTUtilities:
         Note: from early experiments, requiring a rationale for the answer leads to materially better results than just asking for a yes not response.
         """
         if prompt_template.strip() == "":
-            prompt_template = f"""You are a waiter at a restaurant. Does the following statement make sense to you, ignore spelling mistakes 
-                                and things that might be food or beverage items even if its not a common item:\n
-                                '{input_text}'?\n
-                                First answer with 'yes' or 'no' only and then give an explanation of your answer in less than 6 words"""
+            prompt_templates = [
+                f"""You are a waiter at a restaurant. Does the following statement make sense to you, 
+                                ignore spelling mistakes and things that might be food or beverage items even if its not a common item:\n'{input_text}'?\nFirst answer with 'yes' or 'no' only and then give 
+                              an explanation of your answer in less than 6 words""",
+                f"""You are a highly intuitive waiter at a cafe. When ordering, sometimes customers start speaking and pause while they think. A customer at a cafe SAID '{input_text}'.\n You must decide if have PAUSED to think or they have FINISHED. Based on what the customer SAID, do you think they have PAUSED or FINISHED.""",
+            ]
+
+            prompt_template = prompt_templates[1]
 
             prompt: str = prompt_template.replace("{input_text}", input_text)
 
@@ -44,7 +48,17 @@ class STTUtilities:
             # use defaults set on server.
             if isinstance(service_agent, YakServiceAgent):
                 response = service_agent.run(prompt)
-                response_text = response.output.value.strip()
+                max_tries = 3
+                while max_tries >= 0:
+                    response_text = response.output.value.strip()
+                    if "PAUSED" in response_text or "FINISHED" in response_text:
+                        break
+                    else:
+                        max_tries -= 1
+                if max_tries < 0:
+                    raise RuntimeError(
+                        "No response from the service agent for checking thought completeness."
+                    )
             elif isinstance(service_agent, ExternalServiceAgent):
                 if service_agent.stream == True:
                     raise RuntimeError(
@@ -58,8 +72,8 @@ class STTUtilities:
                 )
             if getJSON:
                 try:
-                    ret["answer"] = False if "no" in response_text[:3].lower() else True
-                    ret["reason"] = response.output.value
+                    ret["answer"] = False if "PAUSED" in response_text else True
+                    ret["reason"] = response_text
                 except:
                     logger.error("Invalid json returned from completeness check")
             else:

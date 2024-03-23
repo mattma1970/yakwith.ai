@@ -6,7 +6,7 @@ prompt <|im_end|>
 
 """
 
-ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1710414135.058893_0cf/"
+ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1711008943.631961_450"
 
 
 from voice_chat.configs import AppConfig
@@ -65,13 +65,13 @@ def flat_chat_format(dia_list: List[Dict]) -> List[str]:
     """
 
     rules = [
-        """ You do not make up answers about the menu if the item is not on the menu. 
-             If there are any options listed explicitly or implicitly in the menu item then you must let the customer know the options available and ask which one they would like. The options might be indicated by the word 'or' or listed in the 'other' section, or implicitly, by the appearance of more than one price option for a drink which corresponds to small and large size (e.g $4 / $5.5 means small size if $4 and $5.5 is large size).
-            If the customer hasn't added a drink to their order then you should ask if they'd like anything to drink. If they have only ordered a drink then ask if they would like any food.
+        """ You do not make up facts about items on the menu.
+            Where a menu item has choices and alternative ingredients you explore those with the customer before completing the order.
+            You always read the order back to the customer at the end of the conversation and tell them the full price.
         """
     ]
 
-    SYSTEM_PROMPT = "You are a casual waiter in a restaurant. Your job is to collect food and drink orders from customers and answer their questions. ###rules###. The menu is as follows: ###menu### "
+    SYSTEM_PROMPT = "You are a casual waiter in a restaurant. Your job is to collect food and drink orders from customers and answer their questions. You follow these RULES: ###rules###. The MENU is as follows: ###menu### "
 
     string_list = []
     for dialog in dia_list:

@@ -32,7 +32,7 @@ services:
         - --max-input-length
         - "3000"
         - --max-total-tokens
-        - "4000"
+        - "5000"
       ports:
         - "8080:80"
       volumes:
