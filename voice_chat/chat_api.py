@@ -17,8 +17,9 @@ import urllib
 import pickle
 import ast
 from collections import defaultdict
+import copy
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 import io
 import fitz
 
@@ -1023,7 +1024,11 @@ async def upload_menu(
     content = await file.read()
     image_stream = io.BytesIO(content)
     raw_image = Image.open(image_stream)
-    raw_image.save(file_path)
+    shapener = ImageEnhance.Sharpness(raw_image)
+    enhanced_image = shapener.enhance(6)
+    # raw_image.save(file_path)
+    enhanced_image.save(file_path)
+
     image_stream.seek(0)
     AR = raw_image.width / raw_image.height
     lower_res_size = (
