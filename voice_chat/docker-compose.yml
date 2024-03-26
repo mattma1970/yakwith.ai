@@ -28,7 +28,7 @@ services:
       image: ghcr.io/huggingface/text-generation-inference:latest
       command:
         - --model-id
-        - /data/Finetuned-Mistral-7B-OpenOrca
+        - /data/Mistral-7B-OpenOrca
         - --max-input-length
         - "3000"
         - --max-total-tokens

@@ -910,7 +910,7 @@ Deal with menus
 
 
 @app.post("/menus/upload/pdf")
-async def upload_menu_file(
+async def menus_upload_pdf(
     business_uid: str = Form(...),
     file: UploadFile = File(...),
 ):
@@ -1018,7 +1018,7 @@ async def upload_menu(
         )
 
     file_id = str(uuid.uuid4())
-    file_path = f"{Configurations.assets.image_folder}/{file_id}{file_extension}"
+    file_path = f"{Configurations.assets.image_folder}/{file_id}.png"  # All files conversted to png.
 
     # create thumbnail to avoid sending large files back to client
     content = await file.read()
