@@ -41,7 +41,7 @@ class PromptManager:
             else:
                 # Flush the prompt buffer.
                 isCompleteUtterance = True
-                completion_check = {"answer": True, "reason": "Pormpt flushed"}
+                completion_check = {"answer": True, "reason": "Prompt flushed"}
                 prompt_buffer.reset()
 
         except Exception as e:

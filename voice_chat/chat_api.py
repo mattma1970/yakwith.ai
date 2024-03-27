@@ -17,9 +17,11 @@ import urllib
 import pickle
 import ast
 from collections import defaultdict
+import copy
 
-from PIL import Image
+from PIL import Image, ImageEnhance
 import io
+import fitz
 
 from pydantic import BaseModel
 from typing import List, Optional, Union, Dict, Any, Iterator, Tuple, Generator
@@ -215,7 +217,7 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
         # Get the locally configured Service Agent model
         cafe: Cafe = MenuHelper.get_cafe(database, business_uid=config.business_uid)
         model_choice: ModelChoice = ModelHelper.get_model_by_id(
-            database, cafe.service_model
+            database, cafe.services_model
         )  # TODO allow an alternative model to be specified.
 
         if not config.session_id in service_agent_registry:
@@ -853,10 +855,10 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 
 @app.post("/services/yak_service_agent/")
 async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict:
-    """Generic LLM model response from service_agent."""
+    """Locally hosted LLM model based service_agent."""
 
     if not (request.session_id in service_agent_registry):
-        create_yak_service_agent(
+        await create_yak_service_agent(
             ServiceAgentRequest(
                 session_id=request.session_id, business_uid=request.business_uid
             )
@@ -879,7 +881,7 @@ async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict
 
 @app.post("/services/service_agent/")
 def service_agent(request: ThirdPartyServiceAgentRequest) -> Dict:
-    """Generic LLM model response from service_agent."""
+    """Generic 3P LLM model response from service_agent."""
     service_agent: ExternalServiceAgent = None
     response = None
     ok = False
@@ -907,6 +909,92 @@ Deal with menus
 """
 
 
+@app.post("/menus/upload/pdf")
+async def menus_upload_pdf(
+    business_uid: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    Save pdf document as a collection of PNG files (one file per page).
+    Each page has a unique menu_id. The collection of pages has a common grp_id.
+    Unlike /menus/upload, OCR is called on each page as its converted to an image.
+    """
+
+    # TODO validate file.
+    # Check if the file is a PNG image
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="File must be an pdf")
+
+    file_extension = Path(file.filename).suffix
+    if file_extension != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file extension. Only png,jpeg, jpg, .pdf accepted.",
+        )
+
+    _grp_id = str(uuid.uuid4())  # Identifier for the group of pages.
+    _page_zero_file_id: str = (
+        ""  # used as the reference to the first page for the return object. DOne just for consistancy with the /menu/upload endpoint.
+    )
+    okays: List[str] = []  # Success flags from each page of pdf.
+    msgs: List[str] = []  # error messages for each page of pdf.
+    ocr_results: List[str] = []  # results from OCR for each page.
+
+    if file.content_type == "application/pdf":
+        # convert to TIFF
+        contents = await file.read()
+        pdf = fitz.open("pdf", contents)
+
+    for page_number in range(len(pdf)):
+        file_id = str(uuid.uuid4())
+        page = pdf.load_page(page_number)
+        pix = page.get_pixmap(dpi=300)
+        output_filename = f"{Configurations.assets.image_folder}/{file_id}.png"
+        # Save each page
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img.save(output_filename)
+        if page_number == 0:
+            # page zero is use for collating all the text extracted from the pages and for creating a thumb nail image.
+            _page_zero_file_id = file_id
+            img.seek(0)
+            AR = img.width / img.height
+            lower_res_size = (
+                math.floor(Configurations.assets.thumbnail_image_width * AR),
+                Configurations.assets.thumbnail_image_width,
+            )
+            lowres_image = img.resize(lower_res_size, Image.LANCZOS)
+            lowres_file_path = (
+                f"{Configurations.assets.image_folder}/{file_id}_lowres.png"
+            )
+            lowres_image.save(lowres_file_path)
+
+        new_menu: Menu = Menu(
+            menu_id=file_id,
+            collection={"grp_id": _grp_id, "sequence_number": page_number},
+            raw_image_rel_path=f"{file_id}_{page_number}.png",
+            thumbnail_image_rel_path=f"{file_id}_lowres.png",
+        )
+
+        # Create or update the cafe with the new menu
+        ok, msg = MenuHelper.save_menu(database, business_uid, new_menu)
+        ocr_ret = await menu_ocr(business_uid=business_uid, menu_id=new_menu.menu_id)
+        try:
+            okays.append(ok)
+            msgs.append(msg)
+            ocr_results.append(ocr_ret["status"])
+        except Exception as e:
+            logger.log(f"Error processing pdf pages. {e}")
+
+        # Finally collate all the text into the first menu_id record in the group.
+    _ = menus_collate_images(business_uid, grp_id=_grp_id)
+
+    return {
+        "status": "success" if all(okays) else "erorr",
+        "message": ";".join(msgs),
+        "payload": {"menu_id": _page_zero_file_id, "grp_id": _grp_id},
+    }
+
+
 @app.post("/menus/upload/")
 async def upload_menu(
     business_uid: str = Form(...),
@@ -930,13 +1018,17 @@ async def upload_menu(
         )
 
     file_id = str(uuid.uuid4())
-    file_path = f"{Configurations.assets.image_folder}/{file_id}{file_extension}"
+    file_path = f"{Configurations.assets.image_folder}/{file_id}.png"  # All files conversted to png.
 
     # create thumbnail to avoid sending large files back to client
     content = await file.read()
     image_stream = io.BytesIO(content)
     raw_image = Image.open(image_stream)
-    raw_image.save(file_path)
+    shapener = ImageEnhance.Sharpness(raw_image)
+    enhanced_image = shapener.enhance(6)
+    # raw_image.save(file_path)
+    enhanced_image.save(file_path)
+
     image_stream.seek(0)
     AR = raw_image.width / raw_image.height
     lower_res_size = (
@@ -1108,8 +1200,14 @@ async def menus_delete_one(business_uid: str, menu_id: str):
 
 
 @app.get("/menus/ocr/{business_uid}/{menu_id}")
-async def menu_ocr(business_uid: str, menu_id: str):
-    """Call the tesseract OCR endpoint see https://github.com/hertzg/tesseract-server"""
+async def menu_ocr(business_uid: str, menu_id: str, grp_id: str = ""):
+    """
+    Call the tesseract OCR endpoint see https://github.com/hertzg/tesseract-server
+    for a single image. If the menu has multiple pages (one image per page) then this endpoint shoudl be called once for each page.
+    @args:
+        menu_id: str: unique identifier of the menu page ( menus can contain multiple pages)
+        grp_id: str: identifier for the collection of pages (menu_id) making up the menu. If grp_id is not none. Then the
+    """
 
     ret = None
     status: bool = False
@@ -1233,7 +1331,7 @@ if __name__ == "__main__":
     logger.addHandler(file_handler)
 
     try:
-        # Create metric loggers.
+        # Create metric loggers which allows metrics and their summary stats to be generated for insturmented functions.
         metric_logger = GlobalMetrics.metric_logger
         metric_logger.level = GlobalMetrics.LogLevel.DEBUG
     except:
