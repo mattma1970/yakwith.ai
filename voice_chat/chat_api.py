@@ -949,7 +949,9 @@ async def menus_upload_pdf(
         file_id = str(uuid.uuid4())
         page = pdf.load_page(page_number)
         pix = page.get_pixmap(dpi=300)
-        output_filename = f"{Configurations.assets.image_folder}/{file_id}.png"
+        output_filename = (
+            f"{Configurations.assets.image_folder}/{file_id}_{page_number}.png"
+        )
         # Save each page
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img.save(output_filename)
@@ -1195,7 +1197,12 @@ async def menus_update_one(business_uid: str, menu_id: str, menu: Menu):
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
 async def menus_delete_one(business_uid: str, menu_id: str):
-    ok, msg = MenuHelper.delete_one_menu(database, business_uid, menu_id)
+    """Delete all the images and database record associated with the menu page (menu_id) passed in."""
+    ok, msg = MenuHelper.delete_all_images_by_menu_id(
+        database, business_uid, menu_id, Configurations.assets.image_folder
+    )
+    if ok:
+        ok, msg = MenuHelper.delete_one_menu(database, business_uid, menu_id)
     return {"status": "success" if ok == True else "error", "message": msg}
 
 

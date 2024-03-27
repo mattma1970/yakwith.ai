@@ -376,6 +376,67 @@ class MenuHelper:
         return ok, msg
 
     @classmethod
+    def get_menu_image_names(cls, menu: Menu) -> List[str]:
+        """Get just the images file names"""
+        return [
+            menu.raw_image_rel_path,
+            menu.thumbnail_image_rel_path,
+            menu.ocr_image_rel_path,
+        ]
+
+    @classmethod
+    def delete_all_images_by_menu_id(
+        cls,
+        db: DatabaseConfig,
+        business_uid: str,
+        menu_id: str,
+        image_root: os.PathLike,
+    ) -> Tuple[bool, str]:
+        """Delete all images in the same group (specified by grp_id) as the menu page with menu_id == menu_id"""
+        ok = False
+        msg = ""
+        try:
+            cafe_dict: Dict = db.cafes.find_one(
+                {"business_uid": business_uid, "menus.menu_id": menu_id}
+            )
+            cafe: Cafe = Cafe.from_dict(cafe_dict)
+            menus = [menu for menu in cafe.menus if menu.menu_id == menu_id]
+            images_to_delete: List[str] = (
+                []
+            )  # list of file names of images to be deleted.
+            if len(menus) > 0:
+                grp_id: str = ""
+                if "grp_id" in menus[0].collection:
+                    grp_id = menus[0].collection["grp_id"]
+                    images_to_delete = [
+                        cls.get_menu_image_names(menu)
+                        for menu in cafe.menus
+                        if "grp_id" in menu.collection
+                        and menu.collection["grp_id"] == grp_id
+                    ]  # For backwards compat, some early menu's did not have grp id.
+                    images_to_delete = sum(images_to_delete, [])
+                else:
+                    images_to_delete = cls.get_menu_image_names(menus[0])
+                images_to_delete = [
+                    img_rel_path
+                    for img_rel_path in images_to_delete
+                    if img_rel_path != ""
+                ]
+                logger.info(
+                    f"Deleting {len(images_to_delete)} images in collection of images containing menu_id {menu_id}"
+                )
+                # Delete the image files.
+                for image_file in images_to_delete:
+                    if os.path.exists(os.path.join(image_root, image_file)):
+                        os.remove(os.path.join(image_root, image_file))
+            ok = True
+        except Exception as e:
+            logger.error(
+                f"Failed to remove all images associated with menu grp_id {grp_id}: {e}"
+            )
+        return ok, msg
+
+    @classmethod
     def update_menu_field(
         cls,
         db: DatabaseConfig,
