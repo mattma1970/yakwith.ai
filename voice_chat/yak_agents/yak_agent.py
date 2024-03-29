@@ -10,9 +10,10 @@ from griptape.structures import Agent
 from griptape.memory.structure import ConversationMemory
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
-    HuggingFaceInferenceClientPromptDriver,
+    HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
+from griptape.tokenizers import HuggingFaceTokenizer
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent, EventListener
 from griptape.rules import Rule, Ruleset
 
@@ -146,26 +147,34 @@ class YakAgent:
             self.output_fn = lambda x: print(x)
 
         if self.model_choice.provider == "tgi.local":
+            # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
+            max_new_tokens = self.model_driver_config.params.pop("max_new_tokens", 250)
+            do_stream = self.model_driver_config.params.pop("stream", True)
             self.agent = Agent(
-                prompt_driver=HuggingFaceInferenceClientPromptDriver(
-                    token=self.model_driver_config.token,
+                prompt_driver=HuggingFaceHubPromptDriver(
+                    api_token=self.model_driver_config.token,
                     model=self.model_driver_config.model,
-                    pretrained_tokenizer=os.path.join(
-                        os.environ["APPLICATION_ROOT_FOLDER"],
-                        self.model_driver_config.pretrained_tokenizer,
+                    tokenizer=HuggingFaceTokenizer(
+                        tokenizer=AutoTokenizer.from_pretrained(
+                            os.path.join(
+                                os.environ["APPLICATION_ROOT_FOLDER"],
+                                self.model_driver_config.pretrained_tokenizer,
+                            )
+                        ),
+                        max_output_tokens=max_new_tokens,
                     ),
                     params=self.model_driver_config.params,
-                    task=self.model_driver_config.task,
-                    stream=self.model_driver_config.stream,
-                    stream_chunk_size=self.model_driver_config.stream_chunk_size,
                 ),
                 # event_listeners=self.streaming_event_listeners,
                 logger_level=logging.ERROR,
                 rules=[Rule(rule) for rule in self.rules],
                 stream=self.stream,
-                memory=ConversationMemory() if self.enable_memory else None,
                 # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
             )
+            # Turn off conversation memory if disabled in yak_agent. This is done outside the Agent creation
+            # in order that the conversation memory default can access gripetape.ai configuration setting
+            if self.enable_memory is False:
+                self.agent.conversation_memory = None
         elif self.model_choice.provider == "openai":
             try:
                 self.agent = Agent(

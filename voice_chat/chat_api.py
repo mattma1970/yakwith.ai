@@ -96,7 +96,9 @@ from voice_chat.utils import STTUtilities
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
-from griptape.drivers import HuggingFaceInferenceClientPromptDriver
+from griptape.drivers import (
+    HuggingFaceHubPromptDriver,
+)  # HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
 from griptape.utils import Stream

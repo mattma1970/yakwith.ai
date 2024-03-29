@@ -12,7 +12,8 @@ import logging
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
-    HuggingFaceInferenceClientPromptDriver,
+    # HuggingFaceInferenceClientPromptDriver,
+    HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
 from griptape.utils.stream import Stream

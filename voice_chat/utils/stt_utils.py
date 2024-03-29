@@ -50,7 +50,7 @@ class STTUtilities:
                 response = service_agent.run(prompt)
                 max_tries = 3
                 while max_tries >= 0:
-                    response_text = response.output.value.strip()
+                    response_text = response.output_task.output.value.strip()
                     if "PAUSED" in response_text or "FINISHED" in response_text:
                         break
                     else:
