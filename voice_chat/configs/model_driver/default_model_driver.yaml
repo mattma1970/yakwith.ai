@@ -13,6 +13,6 @@ params:
   stop_sequences:
   - <|im_end|>
   - <|im_start|>
-  max_new_tokens: 2000
+  max_length: 4500
   temperature: 0.4
   stream: ${..stream}

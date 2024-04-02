@@ -30,9 +30,9 @@ services:
         - --model-id
         - /data/Mistral-7B-OpenOrca
         - --max-input-length
-        - "3000"
+        - "3500"
         - --max-total-tokens
-        - "5000"
+        - "4500"
       ports:
         - "8080:80"
       volumes:

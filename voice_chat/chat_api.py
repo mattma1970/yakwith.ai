@@ -500,8 +500,8 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     last_response: str = ""
 
     try:
-        last_run_index = len(yak.agent.memory.runs) - 1
-        last_response = yak.agent.memory.runs[last_run_index].output
+        last_run_index = len(yak.agent.conversation_memory.runs) - 1
+        last_response = yak.agent.conversation_memory.runs[last_run_index].output
     except Exception as e:
         logger.warning(
             f"No conversation runs available for this agent. {session_id}, {e}"
@@ -609,13 +609,16 @@ async def talk_with_avatar(message: ApiUserMessage):
             except Exception as e:
                 logger.error(f"Error during completeness check: {e} ")
 
-        isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
+        """ isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
             message.user_input,
             prompt_buffer=yak.prompt_buffer,
             service_agent=service_agent,
             session_id=session_id,
         )
-        logger.debug(f"IsComplete: {isCompleteUtterance}")
+        logger.debug(f"IsComplete: {isCompleteUtterance}") """
+
+        isCompleteUtterance = True
+        rolling_prompt = message.user_input
 
     if not isCompleteUtterance:
         return
@@ -658,7 +661,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
             yak.status = YakStatus.IDLE
             # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
-            yak.agent.memory.add_run(
+            yak.agent.conversation_memory.add_run(
                 Run(input=message.user_input, output=response.decode("ascii"))
             )  # response is binary string due to teh way Redis stores data.
 
@@ -684,6 +687,12 @@ async def talk_with_avatar(message: ApiUserMessage):
             )
             yak.TextToSpeech = TTS
 
+        # Stop sequences in generated text. These will need to be dropped from teh generated text prior to TTS
+        if "stop_sequences" in yak.model_driver_config.params:
+            stops = yak.model_driver_config.params["stop_sequences"]
+        else:
+            stops = []
+
         metric_logger.debug(
             "Text_Chunk_Rx_Len_Timestamp)",
             (f"START", datetime.now().timestamp() * 1000),
@@ -695,7 +704,10 @@ async def talk_with_avatar(message: ApiUserMessage):
             yielded_from_cache: bool = False
 
             for phrase, overlap in TTS.text_preprocessor(
-                response, filter=TTS.permitted_character_regex, use_ssml=True
+                response,
+                filter=TTS.permitted_character_regex,
+                use_ssml=True,
+                stop_sequences=stops,
             ):
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function
