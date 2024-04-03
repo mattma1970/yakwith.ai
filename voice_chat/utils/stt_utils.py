@@ -36,9 +36,10 @@ class STTUtilities:
                                 ignore spelling mistakes and things that might be food or beverage items even if its not a common item:\n'{input_text}'?\nFirst answer with 'yes' or 'no' only and then give 
                               an explanation of your answer in less than 6 words""",
                 f"""You are a highly intuitive waiter at a cafe. When ordering, sometimes customers start speaking and pause while they think. A customer at a cafe SAID '{input_text}'.\n You must decide if have PAUSED to think or they have FINISHED. Based on what the customer SAID, do you think they have PAUSED or FINISHED.""",
+                f"""Is the following SENTANCE a completed thought or not. Ask yourself the QUESTION 'Assuming I have all the relevant context, does the SENTANCE represent a completed sentance in a long conversation between a waiter in a cafe and a customer'. I'll give you 2 examples: first example, a customer says 'How much' and you say 'REPLY' because you can assume that you already have context for the item the customer is refering to; example two: a customer says 'Does the toast contain', you would reply 'WAIT' because its likely the customer is about to mention the item they are enquiring about. Your TASK is to decide if the SENTANCE represents a completed thought / question. If you decide it is complete then you must say REPLY otherwise say WAIT. If you decide to WAIT then explain the reason for your decision in less than 5 words. The SENTANCE is '{input_text}'. You can assume that you have all the context for the conversation that is needed to understand which menu items are being indirectly referred to.""",
             ]
 
-            prompt_template = prompt_templates[1]
+            prompt_template = prompt_templates[2]
 
             prompt: str = prompt_template.replace("{input_text}", input_text)
 

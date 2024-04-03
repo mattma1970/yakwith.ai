@@ -224,7 +224,9 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
 
         if not config.session_id in service_agent_registry:
             service_agent = YakServiceAgentFactory.create(
-                config.business_uid, config.session_id, model_choice
+                business_uid=config.business_uid,
+                database=database,
+                model_choice=model_choice,
             )
             if service_agent:
                 service_agent_registry[config.session_id] = service_agent
@@ -609,13 +611,13 @@ async def talk_with_avatar(message: ApiUserMessage):
             except Exception as e:
                 logger.error(f"Error during completeness check: {e} ")
 
-        """ isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
+            """isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
             message.user_input,
             prompt_buffer=yak.prompt_buffer,
             service_agent=service_agent,
             session_id=session_id,
         )
-        logger.debug(f"IsComplete: {isCompleteUtterance}") """
+        logger.debug(f"IsComplete: {isCompleteUtterance}")"""
 
         isCompleteUtterance = True
         rolling_prompt = message.user_input
@@ -888,9 +890,9 @@ async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict
         response = f"Error invoking local service_agent: {e}"
         logger.error(response)
     if ok:
-        return {"status": "success", "msg": response.output.value}
+        return {"status": "success", "msg": response.output_task.output.value}
     else:
-        return {"status": "error", "msg": response.output.value}
+        return {"status": "error", "msg": response}
 
 
 @app.post("/services/service_agent/")
