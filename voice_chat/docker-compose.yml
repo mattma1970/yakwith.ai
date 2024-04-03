@@ -33,6 +33,10 @@ services:
         - "3700"
         - --max-total-tokens
         - "4096"
+        - --quantize
+        - "eetq"
+        - --speculate
+        - "2"
       ports:
         - "8080:80"
       volumes:

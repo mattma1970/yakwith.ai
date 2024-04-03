@@ -95,7 +95,7 @@ class TTSUtilities:
         words_for_synth = re.split(r"(?<=\S)\s+(?=\S)", text_for_synth)
 
         if len(words_for_synth) < phrase_length:
-            return phrase, "", ""
+            return words_for_synth, "", ""
 
         phrase = " ".join(words_for_synth[:phrase_length])
         remainder = " ".join(words_for_synth[phrase_length:])

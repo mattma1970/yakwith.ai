@@ -1,7 +1,7 @@
 name: OpenOrcaLocal
 task: text_generation
 model: http://localhost:8080
-pretrained_tokenizer: models/zephyr
+pretrained_tokenizer: models/Open-Hermes-2.5
 token: DUMMY
 timeout: null
 headers:
@@ -10,8 +10,9 @@ cookies: null
 stream: True
 stream_chunk_size: 5
 params:
-  stop_sequences:
-  - </s>
-  max_length: 4096 # total tokens before pruning conversation memory
-  temperature: 0.4
+  stop_sequences: #Used only for text processing and does not affect text generation.
+  - <|im_end|>
+  - <|im_start|>
+  max_length: 4096
+  temperature: 0.3
   stream: ${..stream}

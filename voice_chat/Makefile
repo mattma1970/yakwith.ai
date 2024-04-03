@@ -15,7 +15,7 @@ run_tgi:
 	docker run --rm --gpus all -p 8080:80 -v  $(HOME)models:/data \
 	--pull always ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id /data/Mistral-7B-OpenOrca \
-	--max-input-length 2000 --max-total-tokens 4000
+	--max-input-length 3500 --max-total-tokens 4000
 
 run_tgi_zephyr:
 	echo 'Run TGI with local copy of zephyr 7B'
