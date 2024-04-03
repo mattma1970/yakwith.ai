@@ -173,3 +173,5 @@ voice_chat/data/*
 voice_chat/letsencrypt/*
 voice_chat/redis/dump.rdb
 voice_chat/redis/*
+
+.venv_main	

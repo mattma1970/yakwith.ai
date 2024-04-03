@@ -10,9 +10,9 @@ cookies: null
 stream: True
 stream_chunk_size: 5
 params:
-  stop_sequences:
+  stop_sequences: #Used only for text processing and does not affect text generation.
   - <|im_end|>
   - <|im_start|>
-  max_length: 4500
+  max_length: 4096
   temperature: 0.4
   stream: ${..stream}

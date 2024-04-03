@@ -196,6 +196,20 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
     return {"temp_token": temp_token}
 
 
+@app.get("/agent/reservation/")
+def agent_reservation():
+    """
+    Create a placeholder in the agent registry and return a session_id.
+    The agent will be created when the conversatino starts.
+    """
+    session_id: str = str(uuid4())
+    logger.info(
+        f"Session ID {session_id} reserved"
+    )  # TODO add time limit for session_id to expire.
+    agent_registry[session_id] = None
+    return {"session_id": session_id}
+
+
 @app.post("/agent/create/service_agent")
 async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
     """
@@ -236,20 +250,6 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
         logger.error(msg)
 
     return StdResponse(ok, msg, "")
-
-
-@app.get("/agent/reservation/")
-def agent_reservation():
-    """
-    Create a placeholder in the agent registry and return a session_id.
-    The agent will be created when the conversatino starts.
-    """
-    session_id: str = str(uuid4())
-    logger.info(
-        f"Session ID {session_id} reserved"
-    )  # TODO add time limit for session_id to expire.
-    agent_registry[session_id] = None
-    return {"session_id": session_id}
 
 
 @app.post("/agent/create/")
