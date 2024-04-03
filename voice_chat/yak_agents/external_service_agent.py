@@ -12,7 +12,8 @@ import logging
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
-    HuggingFaceInferenceClientPromptDriver,
+    # HuggingFaceInferenceClientPromptDriver,
+    HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
 from griptape.utils.stream import Stream
@@ -68,7 +69,7 @@ class ExternalServiceAgent:
         try:
             if self.provider == Provider.OPENAI:
                 self.agent = Agent(
-                    memory=None,
+                    conversation_memory=None,
                     prompt_driver=OpenAiChatPromptDriver(
                         temperature=0.4,
                         model=self.model,

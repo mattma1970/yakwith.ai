@@ -13,7 +13,7 @@ import azure.cognitiveservices.speech as speechsdk
 from attrs import define, field, Factory
 from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
-from voice_chat.utils.text_processing import remove_problem_chars
+from voice_chat.utils.text_processing import remove_problem_chars, remove_strings
 from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
@@ -78,6 +78,7 @@ class AzureTextToSpeech(TextToSpeechClass):
         text_stream: Iterable[TextArtifact],
         filter: str = None,
         use_ssml: bool = True,
+        stop_sequences: List[str] = [],
     ):
         """
         Generator of text chunks to be sent for speech synthesis.
@@ -89,6 +90,7 @@ class AzureTextToSpeech(TextToSpeechClass):
         Arguments:
             text_stream. TextArtificat generator
             filter: str: A valid regex that passes acceptable characters (useful for removing punctuation)
+            stop_sequences: LLMs may not remove the stop sequence strings from the generated text. They must be removed before the regex is run in order to avoid the stop sequence string being corrupted and then sent to TTS
         Yields:
             Tuple[str,str]: Text to be generated and cached, additional words used for correcting intonation of short, sub-sentance phrases.
         """
@@ -100,11 +102,14 @@ class AzureTextToSpeech(TextToSpeechClass):
         )
 
         for chunk in text_stream:
-            phrase: str = remove_problem_chars(chunk.value, filter)
-            text_accumulator += phrase  # Acculate the text until a natural break in text is found. Reduce the accumulator as text is sent for synthesis.
-            self.full_message += phrase  # For caching etc.
-
+            # phrase = chunk.value
+            phrase: str = remove_strings(chunk.value, stop_sequences)
+            phrase = remove_problem_chars(phrase, filter)
+            text_accumulator += (
+                phrase  # Acculate all text until a natural break in text is found.
+            )
             # If chunk has no speakable content the skip (ie. if its only punctuation or spaces etc)
+            # logger.info(text_accumulator)
             if bool(re.match(r"^\W+$", phrase)):
                 continue
 
@@ -146,12 +151,8 @@ class AzureTextToSpeech(TextToSpeechClass):
                     )
                 else:
                     continue
-                # If the phrase index hasn't moved then continue collecting text chunks.
-                """ if (
-                    phrase_end_index
-                    == os.environ["MIN_CHARACTERS_FOR_SUBSEQUENT_SYNTHESIS"]
-                ):
-                    continue """
+
+            self.full_message += phrase  # For caching etc.
 
             if phrase.strip() != "":  # if sentence only have \n or space, we could skip
                 preprocessed_phrase = TTSUtilities.prepare_for_synthesis(

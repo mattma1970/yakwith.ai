@@ -1,5 +1,5 @@
 from abc import ABC, abstractclassmethod, abstractproperty, abstractmethod
-from typing import Any, Union, Iterable
+from typing import Any, Union, Iterable, List
 from enum import Enum
 
 
@@ -10,6 +10,7 @@ class TextToSpeechClass(ABC):
         text_stream: Iterable,
         filter: str = None,
         use_ssml: bool = True,
+        stop_sequences: List[str] = [],
     ):
         pass
 

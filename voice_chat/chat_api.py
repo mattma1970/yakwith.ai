@@ -96,7 +96,9 @@ from voice_chat.utils import STTUtilities
 
 from griptape.structures import Agent
 from griptape.utils import Chat, PromptStack
-from griptape.drivers import HuggingFaceInferenceClientPromptDriver
+from griptape.drivers import (
+    HuggingFaceHubPromptDriver,
+)  # HuggingFaceInferenceClientPromptDriver
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
 from griptape.rules import Rule, Ruleset
 from griptape.utils import Stream
@@ -194,6 +196,20 @@ def get_temp_token(req: SttTokenRequest) -> Dict:
     return {"temp_token": temp_token}
 
 
+@app.get("/agent/reservation/")
+def agent_reservation():
+    """
+    Create a placeholder in the agent registry and return a session_id.
+    The agent will be created when the conversatino starts.
+    """
+    session_id: str = str(uuid4())
+    logger.info(
+        f"Session ID {session_id} reserved"
+    )  # TODO add time limit for session_id to expire.
+    agent_registry[session_id] = None
+    return {"session_id": session_id}
+
+
 @app.post("/agent/create/service_agent")
 async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
     """
@@ -222,7 +238,9 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
 
         if not config.session_id in service_agent_registry:
             service_agent = YakServiceAgentFactory.create(
-                config.business_uid, config.session_id, model_choice
+                business_uid=config.business_uid,
+                database=database,
+                model_choice=model_choice,
             )
             if service_agent:
                 service_agent_registry[config.session_id] = service_agent
@@ -232,20 +250,6 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
         logger.error(msg)
 
     return StdResponse(ok, msg, "")
-
-
-@app.get("/agent/reservation/")
-def agent_reservation():
-    """
-    Create a placeholder in the agent registry and return a session_id.
-    The agent will be created when the conversatino starts.
-    """
-    session_id: str = str(uuid4())
-    logger.info(
-        f"Session ID {session_id} reserved"
-    )  # TODO add time limit for session_id to expire.
-    agent_registry[session_id] = None
-    return {"session_id": session_id}
 
 
 @app.post("/agent/create/")
@@ -498,8 +502,8 @@ def get_last_response(session_id: str) -> Dict[str, str]:
     last_response: str = ""
 
     try:
-        last_run_index = len(yak.agent.memory.runs) - 1
-        last_response = yak.agent.memory.runs[last_run_index].output
+        last_run_index = len(yak.agent.conversation_memory.runs) - 1
+        last_response = yak.agent.conversation_memory.runs[last_run_index].output
     except Exception as e:
         logger.warning(
             f"No conversation runs available for this agent. {session_id}, {e}"
@@ -607,13 +611,16 @@ async def talk_with_avatar(message: ApiUserMessage):
             except Exception as e:
                 logger.error(f"Error during completeness check: {e} ")
 
-        isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
+            """isCompleteUtterance, rolling_prompt = PromptManager.SmartAccumulator(
             message.user_input,
             prompt_buffer=yak.prompt_buffer,
             service_agent=service_agent,
             session_id=session_id,
         )
-        logger.debug(f"IsComplete: {isCompleteUtterance}")
+        logger.debug(f"IsComplete: {isCompleteUtterance}")"""
+
+        isCompleteUtterance = True
+        rolling_prompt = message.user_input
 
     if not isCompleteUtterance:
         return
@@ -656,7 +663,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
             yak.status = YakStatus.IDLE
             # Update the conversation memory in the yakagent so the conversation continuity can be maintained.
-            yak.agent.memory.add_run(
+            yak.agent.conversation_memory.add_run(
                 Run(input=message.user_input, output=response.decode("ascii"))
             )  # response is binary string due to teh way Redis stores data.
 
@@ -682,6 +689,12 @@ async def talk_with_avatar(message: ApiUserMessage):
             )
             yak.TextToSpeech = TTS
 
+        # Stop sequences in generated text. These will need to be dropped from teh generated text prior to TTS
+        if "stop_sequences" in yak.model_driver_config.params:
+            stops = yak.model_driver_config.params["stop_sequences"]
+        else:
+            stops = []
+
         metric_logger.debug(
             "Text_Chunk_Rx_Len_Timestamp)",
             (f"START", datetime.now().timestamp() * 1000),
@@ -693,7 +706,10 @@ async def talk_with_avatar(message: ApiUserMessage):
             yielded_from_cache: bool = False
 
             for phrase, overlap in TTS.text_preprocessor(
-                response, filter=TTS.permitted_character_regex, use_ssml=True
+                response,
+                filter=TTS.permitted_character_regex,
+                use_ssml=True,
+                stop_sequences=stops,
             ):
                 if yak.status != YakStatus.TALKING:
                     # When being interupted, the agent_status is be forced to YakStatus.IDLE by an external function
@@ -874,9 +890,9 @@ async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict
         response = f"Error invoking local service_agent: {e}"
         logger.error(response)
     if ok:
-        return {"status": "success", "msg": response.output.value}
+        return {"status": "success", "msg": response.output_task.output.value}
     else:
-        return {"status": "error", "msg": response.output.value}
+        return {"status": "error", "msg": response}
 
 
 @app.post("/services/service_agent/")

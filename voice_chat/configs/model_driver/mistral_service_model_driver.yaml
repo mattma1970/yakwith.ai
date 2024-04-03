@@ -13,6 +13,8 @@ params:
   stop_sequences:
   - <|im_end|>
   - <|im_start|>
-  max_new_tokens: 2000
+  # max_length is absolute number of tokens, including the prompt, that can be handled. 
+  # Avoid using max_new_tokens (= max_output_tokens-token_count(prompt))
+  max_length: 2000
   temperature: 0.2
   stream: ${..stream}

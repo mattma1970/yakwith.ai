@@ -32,6 +32,14 @@ def endpoint(root_url: str, func: str):
     return "/".join([root_url.strip("/"), func])
 
 
+def remove_strings(text: str, strings_to_remove: List[str,]):
+    for seq in strings_to_remove:
+        logger.info(f"{text},{seq}")
+        text = text.replace(seq, "")
+        logger.info(f" final:{text}")
+    return text
+
+
 def remove_problem_chars(
     text: str, acceptable_chars_pattern: str = "[^a-zA-Z0-9,. \s'?!;:]"
 ):

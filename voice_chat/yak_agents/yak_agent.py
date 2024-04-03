@@ -8,11 +8,13 @@ from enum import Enum
 
 from griptape.structures import Agent
 from griptape.memory.structure import ConversationMemory
+from voice_chat.yak_agents.memory import PreprocConversationMemory
 from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
-    HuggingFaceInferenceClientPromptDriver,
+    HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
+from griptape.tokenizers import HuggingFaceTokenizer
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent, EventListener
 from griptape.rules import Rule, Ruleset
 
@@ -22,6 +24,7 @@ import json
 import logging
 from omegaconf import OmegaConf
 
+from voice_chat.utils.chat_template_utils import PromptStackUtils
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 from voice_chat.data_classes import PromptBuffer
 from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
@@ -146,26 +149,54 @@ class YakAgent:
             self.output_fn = lambda x: print(x)
 
         if self.model_choice.provider == "tgi.local":
+            # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
+            max_length = self.model_driver_config.params.pop("max_length", 3000)
+            do_stream = self.model_driver_config.params.pop("stream", True)
             self.agent = Agent(
-                prompt_driver=HuggingFaceInferenceClientPromptDriver(
-                    token=self.model_driver_config.token,
+                prompt_driver=HuggingFaceHubPromptDriver(
+                    api_token=self.model_driver_config.token,
                     model=self.model_driver_config.model,
-                    pretrained_tokenizer=os.path.join(
-                        os.environ["APPLICATION_ROOT_FOLDER"],
-                        self.model_driver_config.pretrained_tokenizer,
+                    tokenizer=HuggingFaceTokenizer(
+                        tokenizer=AutoTokenizer.from_pretrained(
+                            os.path.join(
+                                os.environ["APPLICATION_ROOT_FOLDER"],
+                                self.model_driver_config.pretrained_tokenizer,
+                            )
+                        ),
+                        max_output_tokens=max_length,
                     ),
                     params=self.model_driver_config.params,
-                    task=self.model_driver_config.task,
-                    stream=self.model_driver_config.stream,
-                    stream_chunk_size=self.model_driver_config.stream_chunk_size,
                 ),
                 # event_listeners=self.streaming_event_listeners,
                 logger_level=logging.ERROR,
                 rules=[Rule(rule) for rule in self.rules],
                 stream=self.stream,
-                memory=ConversationMemory() if self.enable_memory else None,
-                # tools = [WebSearch(google_api_key=os.environ['google_api_key'], google_api_search_id=os.environ['google_api_search_id'])],
+                conversation_memory=None,  # add after Agent created.
             )
+            # Agent post-creation patching
+
+            # Override the prompt stack stringifier to make use of the Huggingface apply_chat_template method of the autotokenizer.
+            # TODO remove dependancy on Huggingface
+            if hasattr(
+                self.agent.prompt_driver.tokenizer.tokenizer, "apply_chat_template"
+            ):
+                self.agent.prompt_driver.prompt_stack_to_string = (
+                    PromptStackUtils.autotokenizer_prompt_stack_to_string(
+                        self.agent.prompt_driver.tokenizer
+                    )
+                )
+            else:
+                logger.warning(
+                    f"Tokenizer does not have method apply_chat_template so stopping condition may no be observed."
+                )
+            # Add conversation memory. Default conversation memory in griptap structure is overswritted in favour of the one that pre-processes the text before committing it to conversation memory.
+            if self.enable_memory is True:
+                self.agent.conversation_memory = PreprocConversationMemory(
+                    driver=self.agent.config.global_drivers.conversation_memory_driver,
+                    stop_sequences=self.model_driver_config.params["stop_sequences"],
+                )
+                # self.agent.conversation_memory = ConversationMemory()
+                pass
         elif self.model_choice.provider == "openai":
             try:
                 self.agent = Agent(
@@ -175,8 +206,9 @@ class YakAgent:
                     logger_level=logging.ERROR,
                     rules=[Rule(rule) for rule in self.rules],
                     stream=self.stream,
-                    memory=ConversationMemory() if self.enable_memory else None,
                 )
+                if self.enable_memory is False:
+                    self.agent.conversation_memory = None
             except Exception as e:
                 logger.error(
                     f"""Failed to create Agent with model {self.model_choice.name} 
