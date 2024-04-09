@@ -793,7 +793,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     yielded_from_cache = True
 
                 logger.debug(
-                    f"YEILD:(phrase, source, #B,#V, time):: {'CACHE' if yielded_from_cache else 'GENERATED'}  *{phrase}* {len(blendshapes), len(visemes)} @ {datetime.now().timestamp()*1000}"
+                    f"YEILD:(source, phrase,(#B,#V,#audio_bytes)@time):: {'CACHE' if yielded_from_cache else 'GENERATED'},{phrase},{len(blendshapes), len(visemes),len(audio_data)} @ {datetime.now().timestamp()*1000}"
                 )
 
                 yield BlendShapesMultiPartResponse(

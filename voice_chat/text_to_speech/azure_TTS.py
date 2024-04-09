@@ -239,6 +239,7 @@ class AzureTTSViseme(AzureTextToSpeech):
     # Word boundary callbacks (used by short utterance functions)
     def create_wb_cb(self) -> Callable:
         def _wb_cb(evt):
+            # logger.debug(f"evt: {evt} {evt.text}")
             # logger.debug(f"Word boundary: {(evt.audio_offset+5000)/10000} {evt.text}")
             self.wordboundary_log.append((evt.audio_offset + 5000) / 10000)
 
@@ -337,7 +338,7 @@ class AzureTTSViseme(AzureTextToSpeech):
                                 <mstts:viseme type="{ self.blendshape_options[self.blendshape_type]}"/>
                                 <mstts:silence  type="tailing-exact" value="0ms"/>
                                 <mstts:silence type="leading-exact" value="0ms"/>
-                                <mstts:silence type="sentenceboundart-exact" value="0ms"/>
+                                <mstts:silence type="sentenceboundary-exact" value="0ms"/>
                                  {text}
                         </voice>
                     </speak>"""
@@ -346,7 +347,7 @@ class AzureTTSViseme(AzureTextToSpeech):
 
     def reset_viseme_log(self, start_index: int, blendshape_start) -> None:
         """
-        Its possible that move events have occured since the audio stream yeilded chunks fo the viseme_log
+        Its possible that more events have occured since the audio stream yeilded chunks fo the viseme_log
         should be truncated to remove the old visemes.
         """
         if start_index > 0:
