@@ -16,9 +16,9 @@ from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars, remove_strings
 from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from voice_chat.text_to_speech.TTS_enums import VisemeSource
 
 from utils import TimerContextManager, createIfMissing
-
 import re, json
 import logging
 
@@ -34,11 +34,11 @@ class AzureTextToSpeech(TextToSpeechClass):
         default=speechsdk.audio.AudioOutputConfig(use_default_speaker=True),
         kw_only=True,
     )  # can be overwritten
-
     speech_synthesizer: speechsdk.SpeechSynthesizer = field(init=False)
     full_message: str = field(init=False)
     blendshape_options: dict = field(factory=dict)
     permitted_character_regex: str = "[^a-zA-Z0-9,. \s'?!;:\$]"  # Azure specific.
+    viseme_source: VisemeSource = field(default=VisemeSource.API)
 
     def __attrs_post_init__(self):
         self.blendshape_options = {
@@ -46,10 +46,19 @@ class AzureTextToSpeech(TextToSpeechClass):
             "blendshapes": "FacialExpression",
         }
 
-        speech_config = speechsdk.SpeechConfig(
-            subscription=os.getenv("AZURE_SPEECH_SERVICES_KEY"),
-            region=os.getenv("AZURE_SPEECH_REGION"),
+        logger.info(
+            f'creating Azure Speech Resource in {os.getenv("AZURE_SPEECH_REGION")} '
         )
+
+        speech_config = None
+        if self.viseme_source == VisemeSource.API:
+            speech_config = speechsdk.SpeechConfig(
+                subscription=os.getenv("AZURE_SPEECH_SERVICES_KEY"),
+                region=os.getenv("AZURE_SPEECH_REGION"),
+            )
+        elif self.viseme_source == VisemeSource.RULES:
+            speech_config = speechsdk.SpeechConfig(host="http://localhost:5000")
+
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
         )  # audio/mpeg
@@ -103,6 +112,7 @@ class AzureTextToSpeech(TextToSpeechClass):
 
         for chunk in text_stream:
             # phrase = chunk.value
+            logger.debug(chunk)
             phrase: str = remove_strings(chunk.value, stop_sequences)
             phrase = remove_problem_chars(phrase, filter)
             text_accumulator += (
@@ -267,7 +277,6 @@ class AzureTTSViseme(AzureTextToSpeech):
                         "end"
                     ] = start  # Update the end time marker as the start of the current time.
                 self.viseme_log.append(msg)
-                # logger.debug(f'index: {self.index},{msg}')
                 self.index += 1
             else:
                 # evt.animation will be empty string if only visemes are generated.
@@ -339,7 +348,9 @@ class AzureTTSViseme(AzureTextToSpeech):
                                 <mstts:silence  type="tailing-exact" value="0ms"/>
                                 <mstts:silence type="leading-exact" value="0ms"/>
                                 <mstts:silence type="sentenceboundary-exact" value="0ms"/>
-                                 {text}
+                                <mstts:express-as style="angry" styledegree="1.5" >
+                                    {text}
+                                </mstts:express-as>
                         </voice>
                     </speak>"""
         result = self.speech_synthesizer.speak_ssml_async(ssml).get()

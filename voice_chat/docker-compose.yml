@@ -28,15 +28,11 @@ services:
       image: ghcr.io/huggingface/text-generation-inference:latest
       command:
         - --model-id
-        - /data/Mistral-7B-OpenOrca
+        - /data/Meta-llama-3-8B-Instruct
         - --max-input-length
         - "3700"
         - --max-total-tokens
         - "4096"
-        - --quantize
-        - "eetq"
-        - --speculate
-        - "2"
       ports:
         - "8080:80"
       volumes:
@@ -57,3 +53,17 @@ services:
       - type: bind
         source: "${APPLICATION_ROOT_FOLDER}/${IMAGES_FOLDER}"
         target: /data/images
+  AzureSpeechSDK:
+    image: mcr.microsoft.com/azure-cognitive-services/speechservices/neural-text-to-speech:3.0.0-amd64-en-au-williamneural
+    command:
+      - --memory
+      - 12g
+      - --cpu
+      - "6"
+    ports:
+      - "5000:5000"
+    environment:
+      eula: accept
+      Billing: "${AZURE_TTS_ENDPOINT_URI}"
+      ApiKey: "${AZURE_SPEECH_SERVICES_KEY}"
+

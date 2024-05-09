@@ -1,0 +1,19 @@
+name: MetaLlama3
+task: text_generation
+model: http://localhost:8080
+pretrained_tokenizer: models/Meta-llama-3-8B-Instruct
+token: DUMMY
+timeout: null
+headers:
+  Content-Type: application/json
+cookies: null
+stream: True
+stream_chunk_size: 5
+params:
+  stop_sequences: #Used only for text processing and does not affect text generation.
+  - <|end_of_text|>
+  - <|begin_of_text|>
+  - <|eot_id|>
+  max_length: 4096
+  temperature: 0.4
+  stream: ${..stream}

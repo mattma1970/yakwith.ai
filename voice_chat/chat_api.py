@@ -41,6 +41,7 @@ from logging.handlers import RotatingFileHandler
 import voice_chat.utils.metrics as GlobalMetrics
 
 import azure.cognitiveservices.speech as speechsdk
+from lipsync.LipsyncEn import LipsyncEn
 
 from voice_chat.yak_agents import (
     YakAgent,
@@ -459,6 +460,7 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
                 voice_id=yak.voice_id,
                 audio_config=None,
                 use_blendshapes=avatar_config.blendshapes,
+                viseme_source=avatar_config.viseme_source,
             )
             yak.TextToSpeech = TTS
 
@@ -686,11 +688,15 @@ async def talk_with_avatar(message: ApiUserMessage):
                 voice_id=yak.voice_id,
                 audio_config=None,
                 use_blendshapes=avatar_config.blendshapes,
+                viseme_source=avatar_config.viseme_source,
             )
             yak.TextToSpeech = TTS
 
         # Stop sequences in generated text. These will need to be dropped from teh generated text prior to TTS
-        if "stop_sequences" in yak.model_driver_config.params:
+        if (
+            hasattr(yak.model_driver_config, "params")
+            and "stop_sequences" in yak.model_driver_config.params
+        ):
             stops = yak.model_driver_config.params["stop_sequences"]
         else:
             stops = []
@@ -704,6 +710,8 @@ async def talk_with_avatar(message: ApiUserMessage):
         def stream_generator(response) -> Generator[str, str, bytes]:
             full_text: List = []
             yielded_from_cache: bool = False
+
+            vs_rule_converter = LipsyncEn()
 
             for phrase, overlap in TTS.text_preprocessor(
                 response,
@@ -763,6 +771,12 @@ async def talk_with_avatar(message: ApiUserMessage):
                         stream, visemes, blendshapes = TTS.audio_viseme_generator(
                             phrase, overlap
                         )
+                    # if visemes == []:
+                    visemes_by_rule = vs_rule_converter.words_to_visemes(phrase)
+                    visemes = vs_rule_converter.convert_to_azure_vs(
+                        visemes_by_rule, stream.audio_duration.total_seconds()
+                    )
+
                     audio_data = (
                         stream.audio_data
                     )  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
@@ -1321,6 +1335,81 @@ def cafe_get_setting_options(business_uid: str, table_name: str, columns: str):
         msg = f"Failed to retrieve fields {return_fields} for {table_name}"
 
     return StdResponse(ok, msg, data).to_dict()
+
+
+@app.post("/dev/compare_az_to_rule_vs")
+def dev_compare_az_to_rule_vs(message: ApiUserMessage):
+    from lipsync.LipsyncEn import LipsyncEn
+
+    converter: LipsyncEn = LipsyncEn()
+
+    yak: YakAgent = agent_registry[message.session_id]
+    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
+    TTS: TextToSpeechClass = None
+
+    if yak.TextToSpeech:
+        TTS = yak.TextToSpeech
+    else:
+        TTS = AzureTTSViseme(
+            voice_id=yak.voice_id,
+            audio_config=None,
+            use_blendshapes=False,
+        )
+        yak.TextToSpeech = TTS
+        """ 
+            def stream_generator(text) -> Generator[str, str, bytes]:
+                full_text: List = []
+                yielded_from_cache: bool = False
+        """
+        # response: str = ""
+        blendshapes: List = None
+        visemes: List = None
+        audio_data: bytes = (
+            None  # Possibly compressed, depending on speech synth config
+        )
+
+        audio_result, visemes, _ = TTS.audio_viseme_generator(message.user_input)
+
+        initial_silence: float = visemes[0]["end"]
+        audio_duration = (
+            audio_result.audio_duration.total_seconds() - initial_silence
+        )  # In seconds
+
+        """Convert Azure Visemes to OcculusRift visemes; drop start delay"""
+
+        visemes.pop(0)  # remove leading silence
+        visemes.pop()  # remove trailing silence
+        azure_visemes = []
+        for vs in visemes:
+            start = vs["start"] - initial_silence
+            end = vs["end"] - initial_silence
+            value = converter.azure_to_occulus_viseme_map[vs["value"]]
+            azure_visemes.append((start, end, value, vs["value"]))
+
+        rule_based_visemes = converter.words_to_visemes(message.user_input)
+        normalized_duration = (
+            rule_based_visemes["times"][-1] + rule_based_visemes["durations"][-1]
+        )
+        start_times = [
+            t / normalized_duration * audio_duration
+            for t in rule_based_visemes["times"]
+        ]
+        durations = [
+            d / normalized_duration * audio_duration
+            for d in rule_based_visemes["durations"]
+        ]
+        end_times = [t + d for t, d in zip(start_times, durations)]
+
+        rule_visemes = [
+            (s, t, v)
+            for s, t, v in zip(start_times, end_times, rule_based_visemes["visemes"])
+        ]
+
+        logger.debug(
+            f"YEILD:(phrase,(#B,#V,#audio_bytes)@time)::{message.user_input},{len(visemes)} @ {datetime.now().timestamp()*1000}"
+        )
+
+        return [(a, r) for a, r in zip(azure_visemes, rule_visemes)]
 
 
 if __name__ == "__main__":
