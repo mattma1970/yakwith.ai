@@ -355,7 +355,7 @@ def get_avatar_config(session_id: str) -> Union[Dict, None]:
             ok = False
         logger.debug(f"avatarConfig: {ret}")
 
-    return StdResponse(ok, msg, ret)
+    return StdResponse(ok, msg, ret).to_dict()
 
 
 @app.post("/chat_with_agent")

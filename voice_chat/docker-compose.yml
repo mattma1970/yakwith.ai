@@ -24,17 +24,16 @@ services:
       - type: bind
         source: "${APPLICATION_ROOT_FOLDER}/${IMAGES_FOLDER}"
         target: /data/images
-  text-generation:
-      image: ghcr.io/huggingface/text-generation-inference:latest
+  vllm:
+      image: vllm/vllm-openai:latest
       command:
-        - --model-id
+        - --model
         - /data/Meta-llama-3-8B-Instruct
-        - --max-input-length
-        - "3700"
-        - --max-total-tokens
+        - --max-model-len
         - "4096"
+        - --enable-prefix-caching
       ports:
-        - "8080:80"
+        - "8000:8000"
       volumes:
         - type: bind
           source: ${APPLICATION_ROOT_FOLDER}/${MODEL_FILE_FOLDER}
@@ -57,9 +56,9 @@ services:
     image: mcr.microsoft.com/azure-cognitive-services/speechservices/neural-text-to-speech:3.0.0-amd64-en-au-williamneural
     command:
       - --memory
-      - 12g
+      - 24g
       - --cpu
-      - "6"
+      - "12"
     ports:
       - "5000:5000"
     environment:

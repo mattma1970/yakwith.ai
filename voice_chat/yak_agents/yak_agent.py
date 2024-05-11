@@ -14,7 +14,7 @@ from griptape.drivers import (
     HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
-from griptape.tokenizers import HuggingFaceTokenizer
+from griptape.tokenizers import HuggingFaceTokenizer, OpenAiTokenizer
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent, EventListener
 from griptape.rules import Rule, Ruleset
 
@@ -29,6 +29,7 @@ from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 from voice_chat.data_classes import PromptBuffer
 from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from voice_chat.yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
 
 logger = logging.getLogger(__name__)
 
@@ -148,12 +149,7 @@ class YakAgent:
             self.streaming_event_listeners = []
             self.output_fn = lambda x: print(x)
 
-        if self.model_choice.provider == "tgi.local":
-            # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
-            max_length = self.model_driver_config.params.pop("max_length", 3000)
-            do_stream = self.model_driver_config.params.pop("stream", True)
-            self.agent = Agent(
-                prompt_driver=HuggingFaceHubPromptDriver(
+        """        prompt_driver=HuggingFaceHubPromptDriver(
                     api_token=self.model_driver_config.token,
                     model=self.model_driver_config.model,
                     tokenizer=HuggingFaceTokenizer(
@@ -166,13 +162,34 @@ class YakAgent:
                         max_output_tokens=max_length,
                     ),
                     params=self.model_driver_config.params,
+                ),  """
+
+        if self.model_choice.provider == "tgi.local":
+            # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
+            max_length = self.model_driver_config.params.pop("max_length", 3000)
+            do_stream = self.model_driver_config.params.pop("stream", True)
+            self.agent = Agent(
+                prompt_driver=vLLMChatPromptDriver(
+                    base_url=self.model_driver_config.model,
+                    api_key=self.model_driver_config.token,
+                    model="/data/Meta-llama-3-8B-Instruct",
+                    tokenizer=HuggingFaceTokenizer(
+                        tokenizer=AutoTokenizer.from_pretrained(
+                            os.path.join(
+                                os.environ["APPLICATION_ROOT_FOLDER"],
+                                self.model_driver_config.pretrained_tokenizer,
+                            )
+                        ),
+                        max_output_tokens=max_length,
+                    ),
+                    params=self.model_driver_config.params,
                 ),
-                # event_listeners=self.streaming_event_listeners,
                 logger_level=logging.ERROR,
                 rules=[Rule(rule) for rule in self.rules],
                 stream=self.stream,
                 conversation_memory=None,  # add after Agent created.
             )
+
             # Agent post-creation patching
 
             # Override the prompt stack stringifier to make use of the Huggingface apply_chat_template method of the autotokenizer.

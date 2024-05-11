@@ -1,6 +1,6 @@
 name: MetaLlama3
 task: text_generation
-model: http://localhost:8080
+model: http://localhost:8000/v1
 pretrained_tokenizer: models/Meta-llama-3-8B-Instruct
 token: DUMMY
 timeout: null
