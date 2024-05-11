@@ -1,6 +1,7 @@
 name: OpenOrcaLocal
 task: text_generation
-model: http://localhost:8080
+url: http://localhost:8080 # base url for LLM server endpoint
+model: none  # name of model. Might be a HF repo or docker mounted folder where model files are located ( e.g. /data/mistral-7b-instruct) where /data/ if the volume mount point used by docker.
 pretrained_tokenizer: models/Mistral-7B-OpenOrca
 token: DUMMY
 timeout: null

@@ -32,6 +32,7 @@ class ModelDriverConfiguration:
 
     name: str = field(default=None)
     model: str = field(default=None)
+    url: str = field(default=None)
     pretrained_tokenizer: str = field(default=None)
     token: Optional[str] = field(default=None, kw_only=True)
     # InferenceClient task specific parameters. e.g text_generation and TGI serving see huggingface_hub.inference._text_generation.TextGenerationParameters

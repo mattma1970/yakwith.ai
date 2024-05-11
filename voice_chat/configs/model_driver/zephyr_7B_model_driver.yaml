@@ -1,6 +1,7 @@
 name: OpenOrcaLocal
 task: text_generation
-model: http://localhost:8080
+url: http://localhost:8080
+model: none
 pretrained_tokenizer: models/zephyr
 token: DUMMY
 timeout: null

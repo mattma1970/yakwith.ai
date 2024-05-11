@@ -170,9 +170,9 @@ class YakAgent:
             do_stream = self.model_driver_config.params.pop("stream", True)
             self.agent = Agent(
                 prompt_driver=vLLMChatPromptDriver(
-                    base_url=self.model_driver_config.model,
+                    base_url=self.model_driver_config.url,
                     api_key=self.model_driver_config.token,
-                    model="/data/Meta-llama-3-8B-Instruct",
+                    model=self.model_driver_config.model,
                     tokenizer=HuggingFaceTokenizer(
                         tokenizer=AutoTokenizer.from_pretrained(
                             os.path.join(
