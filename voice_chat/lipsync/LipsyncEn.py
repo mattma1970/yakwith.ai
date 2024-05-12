@@ -388,7 +388,7 @@ class LipsyncEn:
             "sil": 1,
         }
 
-        self.special_durations = {" ": 1, ",": 3, "-": 0.5}
+        self.special_durations = {" ": 1, ",": 2, "-": 0.5}
 
         self.digits = [
             "oh",
