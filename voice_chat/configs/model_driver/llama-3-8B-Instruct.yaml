@@ -1,8 +1,8 @@
-name: OpenOrcaLocal
+name: MetaLlama3
 task: text_generation
-url: http://localhost:8080
-model: none
-pretrained_tokenizer: models/Open-Hermes-2.5
+url: http://localhost:8000/v1
+model: /data/Meta-llama-3-8B-Instruct
+pretrained_tokenizer: models/Meta-llama-3-8B-Instruct
 token: DUMMY
 timeout: null
 headers:
@@ -12,8 +12,9 @@ stream: True
 stream_chunk_size: 5
 params:
   stop_sequences: #Used only for text processing and does not affect text generation.
-  - <|im_end|>
-  - <|im_start|>
+  - <|end_of_text|>
+  - <|begin_of_text|>
+  - <|eot_id|>
   max_length: 4096
-  temperature: 0.3
+  temperature: 0.4
   stream: ${..stream}

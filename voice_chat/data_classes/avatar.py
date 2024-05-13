@@ -4,7 +4,7 @@ import json
 import re
 from attr import define, Factory, field
 import logging
-
+from voice_chat.text_to_speech.TTS_enums import VisemeSource
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +22,18 @@ class AvatarConfigParser:
         kw_only=True, default=False
     )  # Whether blendshapes should be returned for TTS
     avatar: str = field(kw_only=True, default="")  # Avatar name
+    viseme_source: VisemeSource = field(default=VisemeSource.API)
 
     def __attrs_post_init__(self):
         if "useblendshapes" in self.config:
             self.blendshapes = self.config["useblendshapes"]
         if "avatar" in self.config:
             self.avatar = self.config["avatar"]
+        if "visemesource" in self.config:
+            try:
+                self.viseme_source = VisemeSource[self.config["visemesource"].upper()]
+            except:
+                logger.error(
+                    "Invalid visemesource set in avatar configuration. Must be api or local. Defaulting to api"
+                )
+                self.viseme_source = VisemeSource.API

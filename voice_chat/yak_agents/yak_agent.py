@@ -9,10 +9,10 @@ from enum import Enum
 from griptape.structures import Agent
 from griptape.memory.structure import ConversationMemory
 from voice_chat.yak_agents.memory import PreprocConversationMemory
-from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
     HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
+    BasePromptDriver,
 )
 from griptape.tokenizers import HuggingFaceTokenizer
 from griptape.events import CompletionChunkEvent, FinishStructureRunEvent, EventListener
@@ -29,6 +29,7 @@ from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 from voice_chat.data_classes import PromptBuffer
 from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from voice_chat.yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +88,17 @@ class YakAgent:
     prompt_buffer: PromptBuffer = field(
         factory=PromptBuffer
     )  # Used to collect incomplete prompts until a complete one is ready.
+    prompt_driver_selfhosting: Optional[BasePromptDriver] = field(
+        default=None
+    )  # Prompt driver if TGI or VLLM used for privat hosting. Commercial APIs such as chatGPT.
 
     """ Properties related to the griptape Agent """
-    task: Optional[str] = field(default="text_generation", kw_only=True)
+    task: Optional[str] = field(default="text_generation")
     enable_memory: bool = field(
         default=True
     )  # Uses Griptape.ConversationMemory as default of False.
     stream: Optional[bool] = field(default=False)
-    streaming_event_listeners: Optional[List[EventListener]] = field(
-        default=None, kw_only=True
-    )
+    # streaming_event_listeners: Optional[List[EventListener]] = field(default=None )
     output_fn: Optional[Callable] = field(init=False)
     agent: Agent = field(init=False)
     agent_status: YakStatus = field(
@@ -134,46 +136,34 @@ class YakAgent:
         except Exception as e:
             raise RuntimeError(f"Error loading agent related config file: {e}")
 
-        if self.stream:
-            self.streaming_event_listeners = [
-                EventListener(
-                    lambda x: print(x.token, end=""), event_types=[CompletionChunkEvent]
-                ),
-                EventListener(
-                    lambda _: print("\n"), event_types=[FinishStructureRunEvent]
-                ),
-            ]
-            self.output_fn = lambda x: x
-        else:
-            self.streaming_event_listeners = []
-            self.output_fn = lambda x: print(x)
+        """         if self.stream:
+                    self.streaming_event_listeners = [
+                        EventListener(
+                            lambda x: print(x.token, end=""), event_types=[CompletionChunkEvent]
+                        ),
+                        EventListener(
+                            lambda _: print("\n"), event_types=[FinishStructureRunEvent]
+                        ),
+                    ]
+                    self.output_fn = lambda x: x
+                else:
+                    self.streaming_event_listeners = []
+                    self.output_fn = lambda x: print(x) """
 
-        if self.model_choice.provider == "tgi.local":
+        if (
+            self.model_choice.provider == "tgi.local"
+        ):  # TODO change the database to use 'selfhost'
             # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
             max_length = self.model_driver_config.params.pop("max_length", 3000)
             do_stream = self.model_driver_config.params.pop("stream", True)
+            self.set_prompt_driver_for_selfhosting(max_length)
             self.agent = Agent(
-                prompt_driver=HuggingFaceHubPromptDriver(
-                    api_token=self.model_driver_config.token,
-                    model=self.model_driver_config.model,
-                    tokenizer=HuggingFaceTokenizer(
-                        tokenizer=AutoTokenizer.from_pretrained(
-                            os.path.join(
-                                os.environ["APPLICATION_ROOT_FOLDER"],
-                                self.model_driver_config.pretrained_tokenizer,
-                            )
-                        ),
-                        max_output_tokens=max_length,
-                    ),
-                    params=self.model_driver_config.params,
-                ),
-                # event_listeners=self.streaming_event_listeners,
+                prompt_driver=self.prompt_driver_selfhosting,
                 logger_level=logging.ERROR,
                 rules=[Rule(rule) for rule in self.rules],
                 stream=self.stream,
                 conversation_memory=None,  # add after Agent created.
             )
-            # Agent post-creation patching
 
             # Override the prompt stack stringifier to make use of the Huggingface apply_chat_template method of the autotokenizer.
             # TODO remove dependancy on Huggingface
@@ -218,6 +208,53 @@ class YakAgent:
         else:
             logger.error("ModelChoice provider is not recognised.")
         self.status = YakStatus.IDLE
+
+    def set_prompt_driver_for_selfhosting(self, max_length: int) -> bool:
+        """Setter for the prompt driver for self hosting (as opposed to commercial provider such as as openai). Suppport TGI or vLLM
+        @returns:
+            bool: true if successful.
+        """
+        ok: bool = True
+        prompt_driver: BasePromptDriver = None
+        if os.environ["INFERENCE_SERVER"].lower() == "tgi":
+            prompt_driver = HuggingFaceHubPromptDriver(
+                api_token=self.model_driver_config.token,
+                model=self.model_driver_config.model,
+                tokenizer=HuggingFaceTokenizer(
+                    tokenizer=AutoTokenizer.from_pretrained(
+                        os.path.join(
+                            os.environ["APPLICATION_ROOT_FOLDER"],
+                            self.model_driver_config.pretrained_tokenizer,
+                        )
+                    ),
+                    max_output_tokens=max_length,
+                ),
+                params=self.model_driver_config.params,
+            )
+        elif os.environ["INFERENCE_SERVER"].lower() == "vllm":
+            prompt_driver = vLLMChatPromptDriver(
+                base_url=self.model_driver_config.url,
+                api_key=self.model_driver_config.token,
+                model=self.model_driver_config.model,
+                tokenizer=HuggingFaceTokenizer(
+                    tokenizer=AutoTokenizer.from_pretrained(
+                        os.path.join(
+                            os.environ["APPLICATION_ROOT_FOLDER"],
+                            self.model_driver_config.pretrained_tokenizer,
+                        )
+                    ),
+                    max_output_tokens=max_length,
+                ),
+                params=self.model_driver_config.params,
+            )
+        else:
+            logger.error(
+                f'.env setting error: Unsupported inference server {os.environ["INFERENCE_SERVER"]}'
+            )
+            raise KeyError("Unsupported or unrecognized INFERENCE SERVER set in .env")
+            ok = False
+        self.prompt_driver_selfhosting = prompt_driver
+        return ok
 
     @property
     def status(self) -> YakStatus:
