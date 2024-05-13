@@ -425,6 +425,7 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
 
     yak: YakAgent = agent_registry[session_id]
     avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
+    vs_rule_converter = LipsyncEn()
 
     # See if text is in the cache
     response, visemes, blendshapes, audio = "", [], [], ""
@@ -469,6 +470,11 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
                 "SAY: GenerateAudioAndVisemes", logger, logging.DEBUG
             ):
                 stream, visemes, blendshapes = TTS.audio_viseme_generator(prompt)
+                if visemes == []:
+                    visemes_by_rule = vs_rule_converter.words_to_visemes(prompt)
+                    visemes = vs_rule_converter.convert_to_azure_vs(
+                        visemes_by_rule, stream.audio_duration.total_seconds()
+                    )
 
             yield BlendShapesMultiPartResponse(
                 request_uid,
@@ -604,7 +610,6 @@ async def talk_with_avatar(message: ApiUserMessage):
             service_agent = service_agent_registry[session_id]
         else:
             try:
-                # service_agent: YakServiceAgent = YakServiceAgentFactory.create_from_yak_agent(yak)
                 service_agent: YakServiceAgent = YakServiceAgentFactory.create(
                     yak.business_uid, database=database
                 )
@@ -771,11 +776,11 @@ async def talk_with_avatar(message: ApiUserMessage):
                         stream, visemes, blendshapes = TTS.audio_viseme_generator(
                             phrase, overlap
                         )
-                    # if visemes == []:
-                    visemes_by_rule = vs_rule_converter.words_to_visemes(phrase)
-                    visemes = vs_rule_converter.convert_to_azure_vs(
-                        visemes_by_rule, stream.audio_duration.total_seconds()
-                    )
+                    if visemes == []:
+                        visemes_by_rule = vs_rule_converter.words_to_visemes(phrase)
+                        visemes = vs_rule_converter.convert_to_azure_vs(
+                            visemes_by_rule, stream.audio_duration.total_seconds()
+                        )
 
                     audio_data = (
                         stream.audio_data
