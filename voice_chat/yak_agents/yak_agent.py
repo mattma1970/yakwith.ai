@@ -28,7 +28,7 @@ from voice_chat.utils.chat_template_utils import PromptStackUtils
 from voice_chat.data_classes import ModelDriverConfiguration, RuleList
 from voice_chat.data_classes import PromptBuffer
 from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from voice_chat.text_to_speech.classes.text_to_speech import TextToSpeechClass
 from voice_chat.yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
 
 logger = logging.getLogger(__name__)

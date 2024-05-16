@@ -4,7 +4,7 @@ import json
 import re
 from attr import define, Factory, field
 import logging
-from voice_chat.text_to_speech.TTS_enums import VisemeSource
+from voice_chat.text_to_speech.classes.text_to_speech_enums import VisemeSource
 
 logger = logging.getLogger(__name__)
 

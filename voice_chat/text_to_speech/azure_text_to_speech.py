@@ -15,8 +15,8 @@ from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars, remove_strings
 from voice_chat.utils.tts_utilites import TTSUtilities
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
-from voice_chat.text_to_speech.TTS_enums import VisemeSource
+from voice_chat.text_to_speech.classes.text_to_speech import TextToSpeechClass
+from voice_chat.text_to_speech.classes.text_to_speech_enums import VisemeSource
 
 from utils import TimerContextManager, createIfMissing
 import re, json
@@ -217,7 +217,7 @@ class AzureTextToSpeech(TextToSpeechClass):
 
 
 @define
-class AzureTTSViseme(AzureTextToSpeech):
+class AzureTextToSpeechVisemes(AzureTextToSpeech):
     """
     Extends the streaming speech synthesizer to also include viseme and blendshape data.
     While visemes are always returned, blendshapes are optional. If blendshapes are not generated, the blendshap_log
@@ -292,7 +292,7 @@ class AzureTTSViseme(AzureTextToSpeech):
     def audio_viseme_generator(self, text: str, overlap: str = ""):
         """
         Return a tuple of an audio snippet and viseme log containing the time stamps of the viseme events.
-        Note: visemes and blendshapes generated asyn via the viseme_cb callback invokations and pushed to the respective logs.
+        Note: visemes and blendshapes generated async via the viseme_cb callback invokations and pushed to the respective logs.
         """
         if overlap != "":
             text = text + " " + overlap

@@ -90,8 +90,12 @@ from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
 from voice_chat.utils import get_uid
-from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from voice_chat.text_to_speech.azure_text_to_speech import (
+    AzureTextToSpeech,
+    AzureTextToSpeechVisemes,
+)
+from voice_chat.text_to_speech.elevenlabs import ElevenLabsTextToSpeech
+from voice_chat.text_to_speech.classes.text_to_speech import TextToSpeechClass
 
 from voice_chat.utils import STTUtilities
 
@@ -457,7 +461,7 @@ def get_agent_to_say(message: ApiUserMessage) -> Dict:
         if yak.TextToSpeech:
             TTS = yak.TextToSpeech
         else:
-            TTS = AzureTTSViseme(
+            TTS = AzureTextToSpeechVisemes(
                 voice_id=yak.voice_id,
                 audio_config=None,
                 use_blendshapes=avatar_config.blendshapes,
@@ -684,18 +688,22 @@ async def talk_with_avatar(message: ApiUserMessage):
     else:
         # Use the LLM to get the response back.
 
-        TTS: TextToSpeechClass = None
+        text_to_speech_provider: TextToSpeechClass = None
 
         if yak.TextToSpeech:
-            TTS = yak.TextToSpeech
+            text_to_speech_provider = yak.TextToSpeech
         else:
-            TTS = AzureTTSViseme(
-                voice_id=yak.voice_id,
-                audio_config=None,
-                use_blendshapes=avatar_config.blendshapes,
-                viseme_source=avatar_config.viseme_source,
-            )
-            yak.TextToSpeech = TTS
+            if os.environ["SPEECH_PROVIDER"].lower() == "azure":
+                text_to_speech_provider = AzureTextToSpeechVisemes(
+                    voice_id=yak.voice_id,
+                    audio_config=None,
+                    use_blendshapes=avatar_config.blendshapes,
+                    viseme_source=avatar_config.viseme_source,
+                )
+            elif os.environ["SPEECH_PROVIDER"].lower() == "elevenlabs":
+                text_to_speech_provider = ElevenLabsTextToSpeech()  # use all defaults.
+
+            yak.TextToSpeech = text_to_speech_provider
 
         # Stop sequences in generated text. These will need to be dropped from teh generated text prior to TTS
         if (
@@ -710,17 +718,17 @@ async def talk_with_avatar(message: ApiUserMessage):
             "Text_Chunk_Rx_Len_Timestamp)",
             (f"START", datetime.now().timestamp() * 1000),
         )
-        response = Stream(yak.agent).run(message.user_input)
+        agent_response = Stream(yak.agent).run(message.user_input)
 
-        def stream_generator(response) -> Generator[str, str, bytes]:
+        def stream_generator(agent_response) -> Generator[str, str, bytes]:
             full_text: List = []
             yielded_from_cache: bool = False
 
             vs_rule_converter = LipsyncEn()
 
-            for phrase, overlap in TTS.text_preprocessor(
-                response,
-                filter=TTS.permitted_character_regex,
+            for phrase, overlap in text_to_speech_provider.text_preprocessor(
+                agent_response,
+                filter=text_to_speech_provider.permitted_character_regex,
                 use_ssml=True,
                 stop_sequences=stops,
             ):
@@ -737,7 +745,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     f"TIMER: r_id: {request_uid} text chunk recieved @ {datetime.now().timestamp()*1000}: {phrase} + {overlap}"
                 )
 
-                response: str = ""
+                agent_response: str = ""
                 blendshapes: List = None
                 visemes: List = None
                 audio_data: bytes = (
@@ -750,7 +758,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                 if yak.usingCache and cache:
                     with TimerContextManager("CheckCache", logger, logger_level):
                         (
-                            response,
+                            agent_response,
                             visemes,
                             blendshapes,
                             audio_data,
@@ -764,7 +772,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                         visemes = visemes[0]
                         blendshapes = blendshapes[0]
 
-                if response == "":
+                if agent_response == "":
                     logger.debug(f"TextChunkSentForSynth:{phrase}")
                     with TimerContextManager(
                         "GenerateAudioAndVisemes",
@@ -773,10 +781,14 @@ async def talk_with_avatar(message: ApiUserMessage):
                         metric_name="TTS",
                         datum_label=str(len(phrase + overlap)),
                     ):
-                        stream, visemes, blendshapes = TTS.audio_viseme_generator(
+                        (
+                            stream,
+                            visemes,
+                            blendshapes,
+                        ) = text_to_speech_provider.audio_viseme_generator(
                             phrase, overlap
                         )
-                    if visemes == []:
+                    if visemes == None or visemes == []:
                         visemes_by_rule = vs_rule_converter.words_to_visemes(phrase)
                         visemes = vs_rule_converter.convert_to_azure_vs(
                             visemes_by_rule, stream.audio_duration.total_seconds()
@@ -796,9 +808,13 @@ async def talk_with_avatar(message: ApiUserMessage):
                             phrase,
                         ):
                             try:
-                                truncated_duration_ms = TTS.wordboundary_log[
-                                    int(os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"])
-                                ]
+                                truncated_duration_ms = (
+                                    text_to_speech_provider.wordboundary_log[
+                                        int(
+                                            os.environ["WORD_COUNT_FOR_FIRST_SYNTHESIS"]
+                                        )
+                                    ]
+                                )
                                 with TimerContextManager(
                                     "AudioTruncationTimer", logger, logger_level
                                 ):
@@ -849,7 +865,7 @@ async def talk_with_avatar(message: ApiUserMessage):
         yak.agent_status = YakStatus.TALKING
 
         return StreamingResponse(
-            stream_generator(response),
+            stream_generator(agent_response),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
 
@@ -1355,7 +1371,7 @@ def dev_compare_az_to_rule_vs(message: ApiUserMessage):
     if yak.TextToSpeech:
         TTS = yak.TextToSpeech
     else:
-        TTS = AzureTTSViseme(
+        TTS = AzureTextToSpeechVisemes(
             voice_id=yak.voice_id,
             audio_config=None,
             use_blendshapes=False,
