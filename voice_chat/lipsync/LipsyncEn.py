@@ -8,6 +8,7 @@ import re
 from attrs import define, Factory, field
 from timeit_decorator import timeit
 import logging
+from typing import Dict, Tuple, List, Optional
 
 
 @define
@@ -387,6 +388,23 @@ class LipsyncEn:
             "DD": 1.05,
             "sil": 1,
         }
+        self.viseme_durations_elevenlabs = {
+            "aa": 0.99,
+            "E": 1.12,
+            "I": 1.01,
+            "O": 1.22,
+            "U": 0.92,
+            "PP": 0.86,
+            "SS": 0.99,
+            "TH": 1.08,
+            "DD": 0.95,
+            "FF": 1.08,
+            "kk": 0.88,
+            "nn": 1.14,
+            "RR": 1.02,
+            "DD": 0.95,
+            "sil": 1,
+        }
 
         self.special_durations = {" ": 1, ",": 2, "-": 0.5}
 
@@ -607,6 +625,45 @@ class LipsyncEn:
             "visemes": visemes,
             "times": times,
             "durations": durations,
+        }
+
+    def viseme_segmenter(self, w) -> Dict[List, Tuple[str, int, int, int]]:
+        """Get the text chunks that mapp to visiemes.
+        @returns:
+            Dict: words : List of words passed in.
+                : viseme_text_mapping: Tuple[str,int,int,int]: (viseme name, start char, end_char, number of visemes in phenome)
+        """
+        words = w.upper()
+        viseme_text_mapping = []
+        index = 0
+        t = 0
+
+        chars = list(words)
+        while index < len(chars):
+            c = chars[index]
+            ruleset = self.rules.get(c)
+            if ruleset:
+                for rule in ruleset:
+                    test = words[:index] + c.lower() + words[index + 1 :]
+                    matches = rule["regex"].search(test)
+                    if matches:
+                        for viseme in rule["visemes"]:
+                            viseme_text_mapping.append(
+                                (
+                                    viseme,
+                                    index,
+                                    index + rule["move"],
+                                    matches[0],
+                                    len(rule["visemes"]),
+                                )
+                            )
+                        index += rule["move"]
+                        break
+            else:
+                index += 1  # else its a non-utterable character to be skipped.
+        return {
+            "words": words,
+            "viseme_mapping": viseme_text_mapping,
         }
 
     def convert_to_azure_vs(
