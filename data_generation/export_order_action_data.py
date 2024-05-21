@@ -1,35 +1,30 @@
-"""
-Create a dataset for making the function call that maintains the current order state.
-The dataset will consist of 
+"""Create a dataset for making the function call that maintains the current order state.
+
+The dataset will consist of
 prompt
 input: all customer/waiter turns prior to the current turn
 the customer turn for the current turn
 target: the order action
 
-
 """
 
-ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1711405462.204613_881"
-
-
 from voice_chat.configs import AppConfig
-
-Configurations = AppConfig.Configurations
 from voice_chat.utils import createIfMissing
 
-from typing import List, Dict, Any, Optional, Tuple
-import re, csv
-import random
+from typing import List, Dict
+import csv
 import logging
 
-from griptape.artifacts import TextArtifact
-
 from dotenv import load_dotenv
-import os, json
+import os
+import json
 from datetime import datetime
 from uuid import uuid4
 
+ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1711405462.204613_881"
+
 load_dotenv()  # get environmet variables as the openai prompt driver expects the credentials to be there.
+Configurations = AppConfig.Configurations
 logger = logging.getLogger("OrderFuncCallDataLogger")
 logger.setLevel(logging.DEBUG)
 log_file_path = os.path.join(
@@ -132,9 +127,6 @@ def flat_chat_format(dia_list: List[Dict]) -> List[str]:
     SYSTEM_PROMPT_CHOICE = 1
 
     final_list = []
-    progressive_conversation = (
-        []
-    )  # list of conversation segments, each ending on customer utterance followed by the action for that utternace.
     for dialog in dia_list:
         """system_prompt = SYSTEM_PROMPT.replace("###rules###", rules[0]).replace(
         "###menu###", json.dumps(dialog["menu"])"""

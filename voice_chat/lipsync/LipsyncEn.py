@@ -5,9 +5,10 @@ Lipsync library for english language based on the rule set contained in https://
 """
 
 import re
-from attrs import define, Factory, field
-from timeit_decorator import timeit
+from attrs import define, field
 import logging
+
+logger = logging.getLogger(__name__)
 
 
 @define
@@ -384,7 +385,6 @@ class LipsyncEn:
             "kk": 1.21,
             "nn": 0.88,
             "RR": 0.88,
-            "DD": 1.05,
             "sil": 1,
         }
 
@@ -643,7 +643,8 @@ class LipsyncEn:
         """
         try:
             return self.azure_to_occulus_viseme_map.index(viseme)
-        except:
+        except Exception as e:
+            logger.error(e)
             return 0
 
 

@@ -1,8 +1,7 @@
-from typing import List, Dict, Any
+from typing import List
 from attr import define, Factory, field
 from griptape.memory.structure import ConversationMemory
 from griptape.memory.structure import Run
-from voice_chat.utils.text_processing import remove_strings
 
 
 @define

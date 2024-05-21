@@ -1,13 +1,9 @@
-""" 
+"""
 Class to manage the accumulation of prompt fragments until a sensible whole is found
 """
 
-from typing import Optional, Dict, Union, List, Any
-from os import PathLike
-import json
-import re
-from attr import define, Factory, field
-import logging
+from typing import Dict
+from attr import define, field
 from datetime import datetime
 from datetime import timedelta
 

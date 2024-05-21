@@ -1,9 +1,9 @@
-import pickle, os, re
+import pickle
+import os
+import re
 from voice_chat.data_classes.cache import CacheHelper, QueryType
-from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.yak_agents import YakAgent
-from typing import Any, List, Dict
-from enum import Enum
+from typing import List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class CacheUtils:
         cache_response_key: str = cache.get_cache_key(
             QueryType.RESPONSE, yak_agent.voice_id, prompt
         )
-        if cache.exists(cache_response_key) == False:
+        if cache.exists(cache_response_key) is False:
             cache.hset(cache_response_key, "response", prompt)
             cache.append_to_cache(cache_response_key, "blendshapes", blendshapes)
             cache.append_to_cache(cache_response_key, "visemes", visemes)
@@ -86,6 +86,7 @@ class CacheUtils:
                 if b"blendshapes" in cached_data:
                     # blendshapes is optional
                     blendshapes = pickle.loads(cached_data[b"blendshapes"])
-            except:
+            except Exception as e:
+                logger.error(e)
                 pass
         return response, visemes, blendshapes, audio

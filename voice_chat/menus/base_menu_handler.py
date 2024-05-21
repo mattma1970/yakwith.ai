@@ -1,5 +1,5 @@
-from attrs import define, field, Factory
-from typing import Optional, List, Dict, Union
+from attrs import field
+from typing import Union
 from data_classes.chat_data_classes import Menu, MenuList
 from datetime import datetime
 from abc import ABC, abstractmethod

@@ -1,30 +1,25 @@
-"""
-Create a completion dataset for supervised fine tuning
-Format of the dataset 
+"""Create a completion dataset for supervised fine tuning
+
+Format of the dataset
 <|im_start|>system
 prompt <|im_end|>
 
 """
 
-ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1711008943.631961_450"
-
-
 from voice_chat.configs import AppConfig
-
-Configurations = AppConfig.Configurations
 from voice_chat.utils import createIfMissing
 
-from typing import List, Dict, Any, Optional, Tuple
-import re, csv
-import random
+from typing import List, Dict
+import csv
 import logging
 
-from griptape.artifacts import TextArtifact
-
 from dotenv import load_dotenv
-import os, json
+import os
+import json
 from datetime import datetime
 from uuid import uuid4
+
+Configurations = AppConfig.Configurations
 
 load_dotenv()  # get environmet variables as the openai prompt driver expects the credentials to be there.
 logger = logging.getLogger("CompletionDataLogger")
@@ -33,6 +28,8 @@ log_file_path = os.path.join(
     Configurations.logging.root_folder, "completion_data_logs.log"
 )
 createIfMissing(log_file_path)
+
+ROOT_PATH = "/home/mtman/Documents/Repos/yakwith.ai/data/1711008943.631961_450"
 
 
 def timestamp_prefix():

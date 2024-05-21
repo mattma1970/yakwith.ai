@@ -1,13 +1,9 @@
-from fastapi import FastAPI, Response
-from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Callable, Any
+from typing import Optional, Dict, Callable
 from dotenv import load_dotenv
-from attrs import define, field, Factory, validators
-from queue import Queue
+from attrs import define, field, Factory
 from enum import Enum
 
 from griptape.structures import Agent
-from griptape.memory.structure import ConversationMemory
 from voice_chat.yak_agents.memory import PreprocConversationMemory
 from griptape.drivers import (
     HuggingFaceHubPromptDriver,
@@ -15,19 +11,17 @@ from griptape.drivers import (
     BasePromptDriver,
 )
 from griptape.tokenizers import HuggingFaceTokenizer
-from griptape.events import CompletionChunkEvent, FinishStructureRunEvent, EventListener
-from griptape.rules import Rule, Ruleset
+from griptape.rules import Rule
 
 from transformers import AutoTokenizer
 import os
-import json
 import logging
 from omegaconf import OmegaConf
 
 from voice_chat.utils.chat_template_utils import PromptStackUtils
-from voice_chat.data_classes import ModelDriverConfiguration, RuleList
+from voice_chat.data_classes import ModelDriverConfiguration
 from voice_chat.data_classes import PromptBuffer
-from voice_chat.data_classes.mongodb import ModelHelper, ModelChoice
+from voice_chat.data_classes.mongodb import ModelChoice
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 from voice_chat.yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
 
@@ -155,7 +149,7 @@ class YakAgent:
         ):  # TODO change the database to use 'selfhost'
             # Remove max_new_tokens and stream from params to avoid duplicate parameters in text_generation.
             max_length = self.model_driver_config.params.pop("max_length", 3000)
-            do_stream = self.model_driver_config.params.pop("stream", True)
+            self.model_driver_config.params.pop("stream", True)
             self.set_prompt_driver_for_selfhosting(max_length)
             self.agent = Agent(
                 prompt_driver=self.prompt_driver_selfhosting,
@@ -177,7 +171,7 @@ class YakAgent:
                 )
             else:
                 logger.warning(
-                    f"Tokenizer does not have method apply_chat_template so stopping condition may no be observed."
+                    "Tokenizer does not have method apply_chat_template so stopping condition may no be observed."
                 )
             # Add conversation memory. Default conversation memory in griptap structure is overswritted in favour of the one that pre-processes the text before committing it to conversation memory.
             if self.enable_memory is True:
@@ -199,7 +193,7 @@ class YakAgent:
                 )
                 if self.enable_memory is False:
                     self.agent.conversation_memory = None
-            except Exception as e:
+            except Exception:
                 logger.error(
                     f"""Failed to create Agent with model {self.model_choice.name} 
                              for provider {self.model_choice.provider}. Please check model name, 

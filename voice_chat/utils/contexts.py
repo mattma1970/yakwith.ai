@@ -1,8 +1,6 @@
 import time
 import logging
-from attrs import define, field, Factory
-from voice_chat.utils.metrics import MetricLogManager
-from typing import Optional, Union, Tuple
+from attrs import define, field
 
 import voice_chat.utils.metrics as GlobalMetricLogger
 

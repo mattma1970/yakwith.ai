@@ -1,12 +1,8 @@
-from typing import List, Dict, Union, Tuple, Any, Optional
+from typing import List, Dict, Union, Optional
 from datetime import datetime, timezone
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import MongoClient
 from uuid import uuid4
 import logging
-import os
-import json
-from pydantic import BaseModel, validator
+from pydantic import validator
 from pydantic.dataclasses import dataclass
 from dataclasses import field  # pydantic.dataclasses doesn't ahve a field method
 from enum import Enum

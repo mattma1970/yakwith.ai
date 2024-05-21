@@ -1,8 +1,6 @@
-from attr import define, field, Factory
 from typing import Callable, Dict, List, Union
 from griptape.utils import PromptStack
 from griptape.tokenizers import HuggingFaceTokenizer
-from griptape.events import FinishStructureRunEvent
 from transformers import AutoTokenizer
 import logging
 

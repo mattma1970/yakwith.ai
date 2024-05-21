@@ -1,4 +1,3 @@
-import pytest
 from voice_chat.yak_agents import ExternalServiceAgent, Provider, Task
 from griptape.structures import Agent
 from unittest.mock import patch, Mock

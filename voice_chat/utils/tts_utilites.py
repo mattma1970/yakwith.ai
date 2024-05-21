@@ -1,13 +1,13 @@
 """
-    Miscellaneous utilities used to manipulate text and audio for TTS operations that are not unique to a STT provider.
+Miscellaneous utilities used to manipulate text and audio for TTS operations that are not unique to a STT provider.
 """
 
 import math
 import re
-from typing import Dict, List, Any, Union, Tuple
+from typing import Tuple
 import logging
 from pydub import AudioSegment
-import io, os
+import io
 import voice_chat.utils.text_processing as TextProcessing
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,8 @@ class TTSUtilities:
                 len(words_for_synth), phrase_length + overlap_length
             )
             overlap = " ".join(words_for_synth[phrase_length:_overlap_word_count])
-        except:
+        except Exception as e:
+            logger.error(e)
             pass
 
         return phrase, overlap, remainder

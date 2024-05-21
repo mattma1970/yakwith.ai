@@ -1,11 +1,10 @@
 """
-Utilities to read json data stored in data_proxies. 
+Utilities to read json data stored in data_proxies.
 This is temporary solution and the data will eventually be moved to a database
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict
 import os
-from os import PathLike
 import json
 from dotenv import load_dotenv
 

@@ -1,25 +1,25 @@
-""" This module is for text to speech from Azure. 
-    Note: the azure-cognitiveservices-speech sdk in ubuntu requires openssl 1.x and does not work for the default v3.0 in ubunt 22.04
-    See installation instructions here. 
-    https://learn.microsoft.com/en-us/azure/ai-services/speech-service/quickstarts/setup-platform?pivots=programming-language-python&tabs=linux%2Cubuntu%2Cdotnetcli%2Cdotnet%2Cjre%2Cmaven%2Cnodejs%2Cmac%2Cpypi
-    voices
-    https://learn.microsoft.com/en-gb/azure/ai-services/speech-service/language-support?tabs=stt#text-to-speech
+"""This module is for text to speech from Azure.
+Note: the azure-cognitiveservices-speech sdk in ubuntu requires openssl 1.x and does not work for the default v3.0 in ubunt 22.04
+See installation instructions here.
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/quickstarts/setup-platform?pivots=programming-language-python&tabs=linux%2Cubuntu%2Cdotnetcli%2Cdotnet%2Cjre%2Cmaven%2Cnodejs%2Cmac%2Cpypi
+voices
+https://learn.microsoft.com/en-gb/azure/ai-services/speech-service/language-support?tabs=stt#text-to-speech
 
 """
 
 import os
-import math
 import azure.cognitiveservices.speech as speechsdk
-from attrs import define, field, Factory
-from typing import List, Any, Dict, Generator, Iterable, Callable, Tuple
+from attrs import define, field
+from typing import List, Dict, Iterable, Callable
 from griptape.artifacts import TextArtifact
 from voice_chat.utils.text_processing import remove_problem_chars, remove_strings
 from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 from voice_chat.text_to_speech.TTS_enums import VisemeSource
 
-from utils import TimerContextManager, createIfMissing
-import re, json
+from utils import createIfMissing
+import re
+import json
 import logging
 
 logger = logging.getLogger("YakChatAPI")
@@ -80,7 +80,7 @@ class AzureTextToSpeech(TextToSpeechClass):
         )  # TODO for testing only need to stream it back.
         self.full_message = ""
 
-        logger.debug(f"Created Azure Speech Synthesizer.")
+        logger.debug("Created Azure Speech Synthesizer.")
 
     def text_preprocessor(
         self,
@@ -105,7 +105,6 @@ class AzureTextToSpeech(TextToSpeechClass):
         """
 
         text_accumulator = ""
-        text_for_accumulation = ""
         is_first_sentance: bool = (
             True  # first chunk of response yeilded needs to be optimised for speed.
         )
@@ -180,7 +179,7 @@ class AzureTextToSpeech(TextToSpeechClass):
 
     def send_audio_to_speaker(self, text: str) -> None:
         """send to local speaker on server as per audio configuration."""
-        if self.audio_config == None:
+        if self.audio_config is None:
             raise RuntimeWarning(
                 "Speech synthesizer is not configured for using local speaker. No audio will be played."
             )
@@ -200,9 +199,9 @@ class AzureTextToSpeech(TextToSpeechClass):
         Returns:
             SpeechSynthesizerResult containing the data for the entire text.
         """
-        if self.audio_config != None:
+        if self.audio_config is not None:
             logger.error(
-                f"Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream. audio_config must be set to None."
+                "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream. audio_config must be set to None."
             )
             raise RuntimeError(
                 "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream."
@@ -273,9 +272,9 @@ class AzureTTSViseme(AzureTextToSpeech):
             if evt.animation == "":
                 # logger.debug(evt)
                 if self.index > 0:
-                    self.viseme_log[-1][
-                        "end"
-                    ] = start  # Update the end time marker as the start of the current time.
+                    self.viseme_log[-1]["end"] = (
+                        start  # Update the end time marker as the start of the current time.
+                    )
                 self.viseme_log.append(msg)
                 self.index += 1
             else:
@@ -329,9 +328,9 @@ class AzureTTSViseme(AzureTextToSpeech):
         Returns:
             SpeechSynthesizerResult containing the data for the entire text.
         """
-        if self.audio_config != None:
+        if self.audio_config is not None:
             logger.error(
-                f"Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream. audio_config must be set to None."
+                "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream. audio_config must be set to None."
             )
             raise RuntimeError(
                 "Speech synthesizer is condfigured for outputing to local speaker and NOT in-memory datastream."

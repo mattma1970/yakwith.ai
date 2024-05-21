@@ -1,11 +1,6 @@
-import math
-import re, json
-from typing import Dict, List, Any, Union, Tuple
+from typing import Dict
 import logging
-import io, os
-from voice_chat.yak_agents.external_service_agent import Task
 from voice_chat.yak_agents import YakServiceAgent, ExternalServiceAgent
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +56,7 @@ class STTUtilities:
                         "No response from the service agent for checking thought completeness."
                     )
             elif isinstance(service_agent, ExternalServiceAgent):
-                if service_agent.stream == True:
+                if service_agent.stream is True:
                     raise RuntimeError(
                         "Streaming external service agents are not supported by isCompleteThought"
                     )
@@ -75,8 +70,8 @@ class STTUtilities:
                 try:
                     ret["answer"] = False if "PAUSED" in response_text else True
                     ret["reason"] = response_text
-                except:
-                    logger.error("Invalid json returned from completeness check")
+                except Exception as e:
+                    logger.error(f"Invalid json returned from completeness check: {e}")
             else:
                 raise RuntimeWarning("IsCompleteThought only support JSON responses.")
         except Exception as e:

@@ -1,19 +1,17 @@
 """
-An agent for miscellaneous ai-powered functions in the app. For example, correcting ORC text which is inherently noisey. 
+An agent for miscellaneous ai-powered functions in the app. For example, correcting ORC text which is inherently noisey.
 """
 
-from typing import List, Optional, Tuple, Union, Generator
+from typing import Optional, Generator
 from dotenv import load_dotenv
-from attrs import define, field, Factory, validators
+from attrs import define, field
 import os
 from enum import Enum
 import logging
 
 from griptape.structures import Agent
-from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
     # HuggingFaceInferenceClientPromptDriver,
-    HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
 )
 from griptape.utils.stream import Stream
@@ -97,7 +95,7 @@ class ExternalServiceAgent:
                 text_response = self.agent.run(prompt).output.to_text()
                 return text_response
         else:
-            raise RuntimeError(f"Error running non stream service agent job.")
+            raise RuntimeError("Error running non stream service agent job.")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,7 @@
 from typing import List, Dict, Union, Tuple, Any
-import datetime
-from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
-from uuid import uuid4
 import logging
 import os
-from pydantic import BaseModel
-from pydantic.dataclasses import dataclass
-from dataclasses import field  # pydantic.dataclasses doesn't ahve a field method
 
 from omegaconf import OmegaConf
 import base64
@@ -208,7 +202,7 @@ class MenuHelper:
                 cafe = updated_partial_cafe
             else:
                 for key, value in updated_partial_cafe.__dict__.items():
-                    if skip_fields is None or not (key in skip_fields):
+                    if skip_fields is None or key not in skip_fields:
                         setattr(cafe, key, value)
             db.cafes.update_one(
                 {"business_uid": business_uid}, {"$set": cafe.to_dict()}, upsert=True
@@ -367,7 +361,7 @@ class MenuHelper:
                 ok = True
             else:
                 logger.error(f"menu_id {menu_id} not found. Delete failed.")
-                msg = f"Erorr: Failed to delete menu {str(e)}"
+                msg = "Erorr: Failed to delete menu."
         except Exception as e:
             logger.error(f"Failed to delete menu with err: {str(e)}")
             ok = False
@@ -401,9 +395,9 @@ class MenuHelper:
             )
             cafe: Cafe = Cafe.from_dict(cafe_dict)
             menus = [menu for menu in cafe.menus if menu.menu_id == menu_id]
-            images_to_delete: List[str] = (
-                []
-            )  # list of file names of images to be deleted.
+            images_to_delete: List[
+                str
+            ] = []  # list of file names of images to be deleted.
             if len(menus) > 0:
                 grp_id: str = ""
                 if "grp_id" in menus[0].collection:
@@ -516,7 +510,6 @@ class MenuHelper:
         ):  # TODO - hack to detect whether a UUID4 str wasn't passed in.
             return 0
         else:
-            count: int = 0
             cafe: Cafe = cls.get_cafe(db, business_uid=business_uid)
             if len(cafe.menus) > 0:
                 menus: List[Menu] = [
@@ -525,7 +518,7 @@ class MenuHelper:
                     if "grp_id" in menu.collection
                     and menu.collection["grp_id"] == grp_id
                 ]
-                count = len(menus)
+                len(menus)
             return len(menus)
 
     @classmethod

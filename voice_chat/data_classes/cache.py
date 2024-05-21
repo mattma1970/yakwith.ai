@@ -1,7 +1,6 @@
-""" Abstract Class Definition for Cache"""
+"""Abstract Class Definition for Cache"""
 
-from abc import ABC, abstractclassmethod, abstractproperty, abstractmethod
-from typing import Any, Union
+from abc import ABC, abstractclassmethod
 from enum import Enum
 
 

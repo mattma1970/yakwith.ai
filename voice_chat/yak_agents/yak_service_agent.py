@@ -7,7 +7,7 @@ YakServiceAgents:
     - do not use conversation memory
     - do not stream responses.
 
-YakServiceAgents are intended to be cached (service_agent_registry) rather than recreated on every invocation and so this class should not be instatiated. 
+YakServiceAgents are intended to be cached (service_agent_registry) rather than recreated on every invocation and so this class should not be instatiated.
 
 """
 
@@ -43,7 +43,7 @@ class YakServiceAgentFactory:
         service_agent: YakServiceAgent = None
 
         logger.info(f"Creating service agent for: {business_uid}")
-        if model_choice == None and database != None:
+        if model_choice is None and database is not None:
             # Get the locally configured Service Agent model
             cafe: Cafe = MenuHelper.get_cafe(database, business_uid)
             model_choice: ModelChoice = ModelHelper.get_model_by_id(
@@ -58,7 +58,6 @@ class YakServiceAgentFactory:
                 enable_memory=False,
             )
             logger.info(f"Ok. Created service agent for llm:{model_choice.name}")
-            ok = True
         except Exception as e:
             msg = (
                 f"{__name__}: A problem occured while creating a yak service agent: {e}"
@@ -75,7 +74,6 @@ class YakServiceAgentFactory:
             service_agent = YakServiceAgentFactory.create(
                 yak.business_uid, yak.model_choice
             )
-            ok = True
         except Exception as e:
             msg = f"A problem occured while creating a yak_agent: {e}"
             logger.error(msg)

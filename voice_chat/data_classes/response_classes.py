@@ -2,7 +2,7 @@
 Convenience classes for return types for fastAPi endpoints.
 """
 
-from typing import Optional, Dict, Union, List, Any
+from typing import Dict, Any
 from dataclasses import dataclass
 import base64
 import json
@@ -38,9 +38,7 @@ class MultiPartResponse:
 
     json_data: str
     audio_bytes: bytes
-    boundary: str = (
-        "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
-    )
+    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
 
     def prepare(self) -> str:
         """
@@ -57,9 +55,7 @@ class BlendShapesMultiPartResponse:
     blendshapes: str
     json_data: str
     audio_bytes: bytes
-    boundary: str = (
-        "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
-    )
+    boundary: str = "frame"  # BOundery marker for multipart mixed type response for fastAPI endpoints
 
     def prepare(self) -> str:
         """

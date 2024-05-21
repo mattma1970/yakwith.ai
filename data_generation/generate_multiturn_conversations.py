@@ -20,29 +20,27 @@ completion is the answer
 
 from voice_chat.configs import AppConfig
 
-Configurations = AppConfig.Configurations
+
 from voice_chat.utils import createFolderIfMissing, createIfMissing
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Tuple
 import re
 import random
 import logging
 
 from griptape.structures import Agent
-from griptape.utils import Chat, PromptStack
 from griptape.drivers import (
-    HuggingFaceInferenceClientPromptDriver,
-    OpenAiCompletionPromptDriver,
     OpenAiChatPromptDriver,
 )
-from griptape.artifacts import TextArtifact
 
 from dotenv import load_dotenv
-import os, json
+import os
+import json
 from datetime import datetime
 from uuid import uuid4
 
 load_dotenv()  # get environmet variables as the openai prompt driver expects the credentials to be there.
+Configurations = AppConfig.Configurations
 logger = logging.getLogger("SynthDataLogger")
 logger.setLevel(logging.DEBUG)
 log_file_path = os.path.join(Configurations.logging.root_folder, "synth_data_logs.log")
@@ -85,9 +83,9 @@ def save_data(results: List[List[str]], menus: Dict, subfolder: str = "0") -> bo
     json_results = []
     try:
         json_results = [json.loads(clear_markdown(datum)) for datum in results]
-    except Exception as e:
+    except Exception:
         logger.error(
-            f"Error parsing entire results list. Iteratively drop run from results to remove corrupt Dialog jsons."
+            "Error parsing entire results list. Iteratively drop run from results to remove corrupt Dialog jsons."
         )
         # try suceissive truncations
         # Adhoc generation errors.
@@ -99,7 +97,7 @@ def save_data(results: List[List[str]], menus: Dict, subfolder: str = "0") -> bo
                         json.loads(clear_markdown(datum)) for datum in results
                     ]
                     break
-                except Exception as e:
+                except Exception:
                     logger.error("Dropping last run..")
             else:
                 logger.error("Unable recover result by dropping results. Skipped")
@@ -470,7 +468,7 @@ def sample_menu(
     non_food_samples = {
         all_items[_idx]: json_menu[all_items[_idx]] for _idx in non_food_groups_idx
     }
-    if not "extra_items" in non_food_samples:
+    if "extra_items" not in non_food_samples:
         non_food_samples.update({"extra_items": json_menu["extra_items"]})
 
     ret: Dict = {"food_items": food_sample}
@@ -481,9 +479,9 @@ def sample_menu(
 
 
 system_prompts = [
-    f"You are a casual waiter in a restaurant. Your job is to collect food and drink orders from customers and answer their questions. Your first task is to create a dialog dataset based on the FULL_MENU provided below, in json format, for plausible conversations with customers. ###rules### \r\n",
-    f"You are a synthetic data generator for multiturn Dialogs between a waiter in a restaurant and a customer. Your task is to generate realistic Dialogs between a waiter and a customer while the customer is making their order, enquiring about menu items or asking for modifications to menu items available in the FULL_MENU included below. ###rules###\r\n",
-    f"Your task is to create a dialog dataset for conversations between a waiter and a customer when ordering from the FULL_MENU provided below, in json format. You must generate plausible conversations with customers by following these RULES.\n RULES:###rules### \r\n",
+    "You are a casual waiter in a restaurant. Your job is to collect food and drink orders from customers and answer their questions. Your first task is to create a dialog dataset based on the FULL_MENU provided below, in json format, for plausible conversations with customers. ###rules### \r\n",
+    "You are a synthetic data generator for multiturn Dialogs between a waiter in a restaurant and a customer. Your task is to generate realistic Dialogs between a waiter and a customer while the customer is making their order, enquiring about menu items or asking for modifications to menu items available in the FULL_MENU included below. ###rules###\r\n",
+    "Your task is to create a dialog dataset for conversations between a waiter and a customer when ordering from the FULL_MENU provided below, in json format. You must generate plausible conversations with customers by following these RULES.\n RULES:###rules### \r\n",
 ]
 
 system_prompt = system_prompts[2]

@@ -10,7 +10,7 @@ def test_get_all():
 def test_client_authorized():
     assert (
         DataProxy.verify_client_authorized("user_1_key", "data_proxy_tests", "./")
-        == True
+        is True
     )
     "Failed client_authorized"
 
@@ -18,7 +18,7 @@ def test_client_authorized():
 def test_client_not_authorized():
     assert (
         DataProxy.verify_client_authorized("user_1_key_2", "data_proxy_tests", "./")
-        == False
+        is False
     ), "Returned true for user that was not authorized."
 
 

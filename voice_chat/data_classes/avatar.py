@@ -1,7 +1,4 @@
-from typing import Optional, Dict, Union, List, Any
-from os import PathLike
-import json
-import re
+from typing import Dict
 from attr import define, Factory, field
 import logging
 from voice_chat.text_to_speech.TTS_enums import VisemeSource
@@ -32,8 +29,8 @@ class AvatarConfigParser:
         if "visemesource" in self.config:
             try:
                 self.viseme_source = VisemeSource[self.config["visemesource"].upper()]
-            except:
+            except Exception as e:
                 logger.error(
-                    "Invalid visemesource set in avatar configuration. Must be api or local. Defaulting to api"
+                    f"Invalid visemesource set in avatar configuration. Must be api or local. Defaulting to api: {e}"
                 )
                 self.viseme_source = VisemeSource.API

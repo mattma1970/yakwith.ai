@@ -7,8 +7,9 @@ https://www.kaggle.com/datasets/ahmedshahriarsakib/uber-eats-usa-restaurants-men
 import pandas as pd
 import json
 from datetime import datetime
-import random, string, os
-import csv
+import random
+import string
+import os
 
 data_path = (
     "/home/mtman/Documents/Repos/yakwith.ai/data/cafes_menu_long_descriptions_v2.csv"

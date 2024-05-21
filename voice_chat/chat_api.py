@@ -1,60 +1,45 @@
-from omegaconf import OmegaConf, DictConfig
 from voice_chat.configs import AppConfig
 
-Configurations = AppConfig.Configurations
 
-from fastapi import FastAPI, Response, File, UploadFile, HTTPException, Form
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 import requests
 import uuid
-import shutil
 from pathlib import Path
-import base64
 import math
 import urllib
 import pickle
-import ast
 from collections import defaultdict
-import copy
 
 from PIL import Image, ImageEnhance
 import io
 import fitz
 
-from pydantic import BaseModel
-from typing import List, Optional, Union, Dict, Any, Iterator, Tuple, Generator
-from dotenv import load_dotenv
+from typing import List, Optional, Union, Dict, Any, Iterator, Generator
 from uuid import uuid4
-from attr import define, field, Factory
 import argparse
 import os
 import json
-from datetime import time, datetime
-from dataclasses import dataclass
-from enum import Enum
 from datetime import datetime
 
 import logging
 from logging.handlers import RotatingFileHandler
 import voice_chat.utils.metrics as GlobalMetrics
 
-import azure.cognitiveservices.speech as speechsdk
 from lipsync.LipsyncEn import LipsyncEn
 
 from voice_chat.yak_agents import (
     YakAgent,
     YakStatus,
     ExternalServiceAgent,
-    Task,
     YakServiceAgentFactory,
     YakServiceAgent,
 )
 
 from voice_chat.data_classes.api import (
     ApiUserMessage,
-    AppParameters,
     SessionStart,
     ThirdPartyServiceAgentRequest,
     LocalServiceAgentResquest,
@@ -62,7 +47,6 @@ from voice_chat.data_classes.api import (
     ServiceAgentRequest,
 )
 
-from voice_chat.data_classes import PromptManager
 
 from voice_chat.data_classes import (
     StdResponse,
@@ -77,8 +61,6 @@ from voice_chat.data_classes.mongodb import (
     DataHelper,
     ModelChoice,
     ModelHelper,
-    ModelChoice,
-    ModelHelper,
 )
 from voice_chat.data_classes.avatar import AvatarConfigParser
 from voice_chat.data_classes.redis import RedisHelper
@@ -86,22 +68,13 @@ from voice_chat.utils.cache_utils import CacheUtils, QueryType, TTSUtilities
 
 from voice_chat.utils import TimerContextManager
 
-from bson import ObjectId
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
 from voice_chat.utils import get_uid
 from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 
-from voice_chat.utils import STTUtilities
 
-from griptape.structures import Agent
-from griptape.utils import Chat, PromptStack
-from griptape.drivers import (
-    HuggingFaceHubPromptDriver,
-)  # HuggingFaceInferenceClientPromptDriver
-from griptape.events import CompletionChunkEvent, FinishStructureRunEvent
-from griptape.rules import Rule, Ruleset
 from griptape.utils import Stream
 from griptape.artifacts import TextArtifact
 from griptape.memory.structure import Run
@@ -111,6 +84,7 @@ _ALL_TASKS = ["chat_with_agent:post", "chat:post", "llm_params:get"]
 _DEFAULT_BUSINESS_UID = "all"
 _MENU_RULE_PREFIX = "Below is the menu for a cafe:\n\n"
 
+Configurations = AppConfig.Configurations
 app = FastAPI()
 
 """
@@ -237,7 +211,7 @@ async def create_yak_service_agent(config: ServiceAgentRequest) -> Dict:
             database, cafe.services_model
         )  # TODO allow an alternative model to be specified.
 
-        if not config.session_id in service_agent_registry:
+        if config.session_id not in service_agent_registry:
             service_agent = YakServiceAgentFactory.create(
                 business_uid=config.business_uid,
                 database=database,
@@ -350,7 +324,7 @@ def get_avatar_config(session_id: str) -> Union[Dict, None]:
         yak: YakAgent = agent_registry[session_id]
         try:
             ret = yak.avatar_config
-        except Exception as e:
+        except Exception:
             msg = "SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect."
             ok = False
         logger.debug(f"avatarConfig: {ret}")
@@ -543,7 +517,6 @@ def talk_with_agent(message: ApiUserMessage) -> Dict:
     yak: YakAgent = agent_registry[session_id]
 
     TTS: AzureTextToSpeech = AzureTextToSpeech(voice_id=yak.voice_id, audio_config=None)
-    message_accumulator = []
     response = Stream(yak.agent).run(message.user_input)  # Streaming response.
     yak.agent_status = YakStatus.TALKING
 
@@ -574,9 +547,7 @@ async def talk_with_avatar(message: ApiUserMessage):
     logger.debug(
         f"User input received: {message.user_input} @ {datetime.now().timestamp()*1000}"
     )
-    request_uid: str = (
-        get_uid()
-    )  # Unique label for the request. Used to deal with request collections at the client-side
+    request_uid: str = get_uid()  # Unique label for the request. Used to deal with request collections at the client-side
 
     session_id: str = message.session_id
     if session_id not in agent_registry:
@@ -639,7 +610,7 @@ async def talk_with_avatar(message: ApiUserMessage):
         cache_key = cache.get_cache_key(
             QueryType.REQUEST, yak.voice_id, message.user_input
         )
-        if has_pronouns(message.user_input) == False:
+        if not has_pronouns(message.user_input):
             cached_response = cache.hgetall(name=cache_key)
 
     if cache and cached_response and len(cached_response) > 0:
@@ -708,7 +679,7 @@ async def talk_with_avatar(message: ApiUserMessage):
 
         metric_logger.debug(
             "Text_Chunk_Rx_Len_Timestamp)",
-            (f"START", datetime.now().timestamp() * 1000),
+            ("START", datetime.now().timestamp() * 1000),
         )
         response = Stream(yak.agent).run(message.user_input)
 
@@ -782,9 +753,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                             visemes_by_rule, stream.audio_duration.total_seconds()
                         )
 
-                    audio_data = (
-                        stream.audio_data
-                    )  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
+                    audio_data = stream.audio_data  # a bytes like object of audio. The audio might be compressed (e.g. mp3 if that's how the TTS is configured)
                     if overlap != "":
                         # overlap only has a non-empty value if we've added extra words to fix intonation problems. This should be dropped.
                         # boundary of words to be dropped from audio. Note that phrase is never modified with addtional words.
@@ -829,7 +798,7 @@ async def talk_with_avatar(message: ApiUserMessage):
                     cache.append_to_cache(cache_key, "blendshapes", blendshapes)
                     cache.append_to_cache(cache_key, "visemes", visemes)
                     cache.append_to_cache(cache_key, "audio", audio_data)
-                    logger.debug(f"Add chunks to cache")
+                    logger.debug("Add chunks to cache")
 
                     if not (yielded_from_cache):
                         # If this was generated by the TTS and its short, then cache it for latency reduction.
@@ -892,7 +861,7 @@ async def services_get_ai_prompts(businessUID: str) -> Dict:
 async def services_yak_service_agent(request: LocalServiceAgentResquest) -> Dict:
     """Locally hosted LLM model based service_agent."""
 
-    if not (request.session_id in service_agent_registry):
+    if request.session_id not in service_agent_registry:
         await create_yak_service_agent(
             ServiceAgentRequest(
                 session_id=request.session_id, business_uid=request.business_uid
@@ -968,9 +937,7 @@ async def menus_upload_pdf(
         )
 
     _grp_id = str(uuid.uuid4())  # Identifier for the group of pages.
-    _page_zero_file_id: str = (
-        ""  # used as the reference to the first page for the return object. DOne just for consistancy with the /menu/upload endpoint.
-    )
+    _page_zero_file_id: str = ""  # used as the reference to the first page for the return object. DOne just for consistancy with the /menu/upload endpoint.
     okays: List[str] = []  # Success flags from each page of pdf.
     msgs: List[str] = []  # error messages for each page of pdf.
     ocr_results: List[str] = []  # results from OCR for each page.
@@ -1227,7 +1194,7 @@ def menus_get_as_options(business_uid: str, encoded_utc_time: str):
 async def menus_update_one(business_uid: str, menu_id: str, menu: Menu):
     """Update one menu in the cafe.menus. Menu contains optional fields, which, when absent leave the stored menu field unchanged."""
     ok, msg = MenuHelper.update_menu(database, business_uid, menu)
-    return {"status": "success" if ok == True else "error", "message": msg}
+    return {"status": "success" if ok else "error", "message": msg}
 
 
 @app.get("/menus/delete_one/{business_uid}/{menu_id}")
@@ -1238,7 +1205,7 @@ async def menus_delete_one(business_uid: str, menu_id: str):
     )
     if ok:
         ok, msg = MenuHelper.delete_one_menu(database, business_uid, menu_id)
-    return {"status": "success" if ok == True else "error", "message": msg}
+    return {"status": "success" if ok else "error", "message": msg}
 
 
 @app.get("/menus/ocr/{business_uid}/{menu_id}")
@@ -1252,7 +1219,7 @@ async def menu_ocr(business_uid: str, menu_id: str, grp_id: str = ""):
     """
 
     ret = None
-    status: bool = False
+    ok: bool = False
     url: str = Configurations.ocr.url
     data = {
         "options": json.dumps(
@@ -1262,10 +1229,7 @@ async def menu_ocr(business_uid: str, menu_id: str, grp_id: str = ""):
             }
         )
     }
-    # Need the file extension
-    menu: Menu = MenuHelper.get_one_menu(
-        database, business_uid=business_uid, menu_id=menu_id
-    )
+
     file_path = f"{Configurations.assets.image_folder}/{menu_id}.png"
 
     try:
@@ -1279,7 +1243,7 @@ async def menu_ocr(business_uid: str, menu_id: str, grp_id: str = ""):
                     "stdout" in ret["data"]
                 ):  # contains messages. OCR text in response.content.stdout
                     # Save it to db
-                    status, msg = MenuHelper.update_menu_field(
+                    ok, msg = MenuHelper.update_menu_field(
                         database,
                         business_uid,
                         menu_id,
@@ -1294,7 +1258,7 @@ async def menu_ocr(business_uid: str, menu_id: str, grp_id: str = ""):
         msg = e
         logger.error(f"Error in performing OCR. Message {e}")
 
-    return {"status": "success" if status == True else "error", "message": msg}
+    return {"status": "success" if ok else "error", "message": msg}
 
 
 """
@@ -1316,10 +1280,8 @@ def get_settings(business_uid: str):
 def cafe_save_settings(settings: Cafe):
     ok: bool = False
     msg: str = ""
-    ret = None
 
     ok, msg = MenuHelper.upsert_cafe_settings(database, settings.business_uid, settings)
-
     return StdResponse(ok, msg).to_dict()
 
 
@@ -1327,7 +1289,6 @@ def cafe_save_settings(settings: Cafe):
 def cafe_get_setting_options(business_uid: str, table_name: str, columns: str):
     ok: bool = False
     msg: str = ""
-    ret = None
     return_fields: str = columns.split(",")
 
     data: List[Dict] = DataHelper.get_non_business_data(
@@ -1349,7 +1310,6 @@ def dev_compare_az_to_rule_vs(message: ApiUserMessage):
     converter: LipsyncEn = LipsyncEn()
 
     yak: YakAgent = agent_registry[message.session_id]
-    avatar_config: AvatarConfigParser = AvatarConfigParser(yak.avatar_config)
     TTS: TextToSpeechClass = None
 
     if yak.TextToSpeech:
@@ -1367,14 +1327,9 @@ def dev_compare_az_to_rule_vs(message: ApiUserMessage):
                 yielded_from_cache: bool = False
         """
         # response: str = ""
-        blendshapes: List = None
         visemes: List = None
-        audio_data: bytes = (
-            None  # Possibly compressed, depending on speech synth config
-        )
 
         audio_result, visemes, _ = TTS.audio_viseme_generator(message.user_input)
-
         initial_silence: float = visemes[0]["end"]
         audio_duration = (
             audio_result.audio_duration.total_seconds() - initial_silence
@@ -1451,9 +1406,9 @@ if __name__ == "__main__":
         # Create metric loggers which allows metrics and their summary stats to be generated for insturmented functions.
         metric_logger = GlobalMetrics.metric_logger
         metric_logger.level = GlobalMetrics.LogLevel.DEBUG
-    except:
+    except Exception as e:
         raise RuntimeError(
-            'Metric logger not initialized. Check that os.environ["APPLICATION_LOG_ROOT"] has been declared.'
+            f'Metric logger not initialized. Check that os.environ["APPLICATION_LOG_ROOT"] has been declared. {e}'
         )
 
     import uvicorn

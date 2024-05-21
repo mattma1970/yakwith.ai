@@ -1,26 +1,18 @@
-from typing import Optional, Dict, Union, List, Any
-from os import PathLike
-from pydantic import BaseModel
-from dataclasses import dataclass
-from attrs import define, field, Factory, validators
+from typing import Optional, Dict, List
+from attrs import define, field, Factory
 from uuid import uuid4
-import base64
+import logging
 
-import datetime
-import pytz
 
 import re
-import json
 
 from griptape.rules import Rule
-from griptape.events import EventListener
 from omegaconf.dictconfig import DictConfig
 from omegaconf import OmegaConf
 
-from fastapi import UploadFile
-
 
 """ Yak App DataClasses """
+logger = logging.getLogger(__name__)
 
 
 @define
@@ -51,9 +43,10 @@ class ModelDriverConfiguration:
             if self.stream or "stream" in self.params:
                 if self.stream != getattr(self.params(), "stream"):
                     raise RuntimeError(
-                        f'ModelDriverConfiguration stream mismatch. params["stream"] and "stream" must be the same.'
+                        'ModelDriverConfiguration stream mismatch. params["stream"] and "stream" must be the same.'
                     )
-        except:
+        except Exception as e:
+            logger.error(e)
             pass
 
     @classmethod

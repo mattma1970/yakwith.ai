@@ -1,9 +1,11 @@
 import numpy as np
-from attrs import field, Factory, define
-from typing import Dict, List, Union, Tuple, Callable
+from attrs import field, define
+from typing import Dict, Union, Tuple, Callable
 from enum import Enum
-from datetime import datetime, timedelta
-import os, random, string, re, json
+import os
+import random
+import string
+import json
 from voice_chat.utils.text_processing import safe_key
 from voice_chat.utils.file import createIfMissing
 import logging
@@ -154,7 +156,7 @@ class MetricLogManager:
 
     def debug(self, metric_name: str, value: Union[float, Tuple]):
         metric_name = safe_key(metric_name)
-        if not metric_name in self.metrics:
+        if metric_name not in self.metrics:
             self.create_metric(metric_name, LogLevel.DEBUG)
 
         if (len(self.metrics[metric_name]) % self.auto_dump_length) == 0:
@@ -170,7 +172,7 @@ class MetricLogManager:
 
     def info(self, metric_name: str, value: Union[float, Tuple]):
         metric_name = safe_key(metric_name)
-        if not metric_name in self.metrics:
+        if metric_name not in self.metrics:
             self.create_metric(metric_name, LogLevel.INFO)
         if (
             self.metrics[metric_name].level == LogLevel.INFO
