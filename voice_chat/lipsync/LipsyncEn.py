@@ -6,7 +6,6 @@ Lipsync library for english language based on the rule set contained in https://
 
 import re
 from attrs import define, Factory, field
-from timeit_decorator import timeit
 import logging
 
 

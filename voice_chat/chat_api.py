@@ -120,6 +120,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    "https://dev.d3hri1oylex0el.amplifyapp.com",
 ]
 origins.extend(Configurations.api.cors_urls)
 
@@ -353,7 +354,7 @@ def get_avatar_config(session_id: str) -> Union[Dict, None]:
         except Exception as e:
             msg = "SessionID has been reserved but agent not yet created. This can be due to the way react.js loads the app twice in dev mode to test for side effect."
             ok = False
-        logger.debug(f"avatarConfig: {ret}")
+        logger.debug(f"avatarConfig: {msg}")
 
     return StdResponse(ok, msg, ret).to_dict()
 

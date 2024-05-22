@@ -28,7 +28,7 @@ services:
       image: vllm/vllm-openai:latest
       command:
         - --model
-        - /data/Meta-llama-3-8B-Instruct
+        - /data/Meta-Llama-3-8B-Instruct
         - --max-model-len
         - "4096"
         - --enable-prefix-caching
@@ -65,4 +65,19 @@ services:
       eula: accept
       Billing: "${AZURE_TTS_ENDPOINT_URI}"
       ApiKey: "${AZURE_SPEECH_SERVICES_KEY}"
+  ProxyManager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '81:81'
+    volumes:
+      - type: bind
+        source: "${APPLICATION_ROOT_FOLDER}/voice_chat/data"
+        target: /data
+      - type: bind
+        source: "${APPLICATION_ROOT_FOLDER}/voice_chat/letsencrypt"
+        target: "/etc/letsencrypt"
+
 

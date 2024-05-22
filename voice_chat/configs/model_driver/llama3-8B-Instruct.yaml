@@ -1,8 +1,8 @@
 name: MetaLlama3
 task: text_generation
 url: http://localhost:8000/v1
-model: /data/Meta-llama-3-8B-Instruct
-pretrained_tokenizer: models/Meta-llama-3-8B-Instruct
+model: /data/Meta-Llama-3-8B-Instruct
+pretrained_tokenizer: models/Meta-Llama-3-8B-Instruct
 token: DUMMY
 timeout: null
 headers:

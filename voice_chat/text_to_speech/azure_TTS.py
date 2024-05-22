@@ -20,6 +20,10 @@ from voice_chat.text_to_speech.TTS_enums import VisemeSource
 
 from utils import TimerContextManager, createIfMissing
 import re, json
+
+MIN_LENGTH_FOR_FIRST_SYNTHESIS = 10
+MIN_LENGTH_FOR_SUBSQUENT_SYNTHESIS = 20
+
 import logging
 
 logger = logging.getLogger("YakChatAPI")
@@ -41,6 +45,11 @@ class AzureTextToSpeech(TextToSpeechClass):
     viseme_source: VisemeSource = field(default=VisemeSource.API)
 
     def __attrs_post_init__(self):
+        # tts sentence end mark used to find natural breaks for chunking data to send to TTS
+        self.tts_sentence_end = [".", "!", "?", ";", "。", "！", "？", "；", "\n", " "]
+
+        self.tts_sentence_end_regex = [r"\.(?![0-9])", r"[!?,;:\s]"]
+
         self.blendshape_options = {
             "visemes_only": "redlips_front",
             "blendshapes": "FacialExpression",

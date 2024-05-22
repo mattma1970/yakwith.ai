@@ -203,7 +203,6 @@ typing_extensions==4.8.0
 tyro==0.7.3
 tzdata==2023.3
 tzlocal==5.2
-unsloth @ git+https://github.com/unslothai/unsloth.git@bb81079ca1dba43fc2cdb79a81ce6edf23f87907
 urllib3==1.26.18
 uvicorn==0.23.2
 validators==0.22.0
