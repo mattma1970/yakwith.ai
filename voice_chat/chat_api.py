@@ -28,7 +28,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import voice_chat.utils.metrics as GlobalMetrics
 
-from lipsync.LipsyncEn import LipsyncEn
+from voice_chat.lipsync.LipsyncEn import LipsyncEn
 
 from voice_chat.yak_agents import (
     YakAgent,
@@ -64,13 +64,13 @@ from voice_chat.data_classes.mongodb import (
 )
 from voice_chat.data_classes.avatar import AvatarConfigParser
 from voice_chat.data_classes.redis import RedisHelper
-from voice_chat.utils.cache_utils import CacheUtils, QueryType, TTSUtilities
+from voice_chat.utils import CacheUtils, QueryType, TTSUtilities
 
 from voice_chat.utils import TimerContextManager
 
 
 from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
-from voice_chat.utils import get_uid
+from voice_chat.utils.misc import get_uid
 from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 

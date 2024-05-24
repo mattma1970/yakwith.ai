@@ -17,7 +17,7 @@ from voice_chat.utils.tts_utilites import TTSUtilities
 from voice_chat.text_to_speech.TTS import TextToSpeechClass
 from voice_chat.text_to_speech.TTS_enums import VisemeSource
 
-from utils import createIfMissing
+from voice_chat.utils.file import createIfMissing
 import re
 import json
 import logging
