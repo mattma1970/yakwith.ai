@@ -1,8 +1,8 @@
 import pickle
 import os
 import re
-from voice_chat.data_classes.cache import CacheHelper, QueryType
-from voice_chat.yak_agents import YakAgent
+from data_classes.cache import CacheHelper, QueryType
+from yak_agents import YakAgent
 from typing import List, Dict
 import logging
 

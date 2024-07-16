@@ -5,7 +5,7 @@ from typing import Optional
 from data_classes.chat_data_classes import Menu, MenuList
 from omegaconf import OmegaConf
 from datetime import datetime
-from voice_chat.menus import BaseMenuHandler
+from menus import BaseMenuHandler
 
 
 @define

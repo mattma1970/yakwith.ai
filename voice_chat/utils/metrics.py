@@ -6,11 +6,11 @@ import os
 import random
 import string
 import json
-from voice_chat.utils.text_processing import safe_key
-from voice_chat.utils.file import createIfMissing
+from .text_processing import safe_key
+from .file import createIfMissing
 import logging
 
-import voice_chat.configs.AppConfig as AppConfig
+import configs.AppConfig as AppConfig
 
 logger = logging.getLogger(__name__)
 

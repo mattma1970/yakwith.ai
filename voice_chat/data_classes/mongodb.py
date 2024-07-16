@@ -8,7 +8,7 @@ import base64
 from itertools import chain
 import json
 
-from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector, ModelChoice
+from data_classes.data_models import Menu, Cafe, ImageSelector, ModelChoice
 
 logger = logging.getLogger(__name__)
 

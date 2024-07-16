@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "yakwith.ai"
+version = "0.1.1"
+description = "Streaming backend for Avatar applications"
+authors = ["mattma1970 <mattma1970@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+griptape = "0.24.2"
+omegaconf = "^2.3.0"
+openai = "^1.35.13"
+pydantic = "^2.8.2"
+pymongo = "^4.8.0"
+py-redis = "^1.1.1"
+torch = "2.3.0"
+pytest = "^8.2.2"
+datasets = "^2.20.0"
+pyarrow = "15.0.0"
+fastapi = "^0.111.1"
+pillow = "^10.4.0"
+pymupdf = "^1.24.7"
+transformers = "^4.42.4"
+pydub = "^0.25.1"
+azure-cognitiveservices-speech = "^1.38.0"
+ruff = "^0.5.2"
+
+[tool.poetry.group.dev.dependencies]
+tqdm = "^4.66.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,7 +1,7 @@
 from typing import Dict
 from attr import define, Factory, field
 import logging
-from voice_chat.text_to_speech.TTS_enums import VisemeSource
+from text_to_speech.TTS_enums import VisemeSource
 
 logger = logging.getLogger(__name__)
 

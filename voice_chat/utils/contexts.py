@@ -2,7 +2,7 @@ import time
 import logging
 from attrs import define, field
 
-import voice_chat.utils.metrics as GlobalMetricLogger
+import utils.metrics as GlobalMetricLogger
 
 metric_logger = GlobalMetricLogger.metric_logger
 

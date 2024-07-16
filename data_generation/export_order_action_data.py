@@ -8,8 +8,8 @@ target: the order action
 
 """
 
-from voice_chat.configs import AppConfig
-from voice_chat.utils import createIfMissing
+from configs import AppConfig
+from utils import createIfMissing
 
 from typing import List, Dict
 import csv

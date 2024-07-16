@@ -8,7 +8,7 @@ from typing import Tuple
 import logging
 from pydub import AudioSegment
 import io
-import voice_chat.utils.text_processing as TextProcessing
+import utils.text_processing as TextProcessing
 
 logger = logging.getLogger(__name__)
 

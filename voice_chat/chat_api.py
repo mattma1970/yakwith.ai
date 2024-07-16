@@ -1,5 +1,4 @@
-from voice_chat.configs import AppConfig
-
+from configs import AppConfig
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import StreamingResponse
@@ -26,11 +25,11 @@ from datetime import datetime
 
 import logging
 from logging.handlers import RotatingFileHandler
-import voice_chat.utils.metrics as GlobalMetrics
+import utils.metrics as GlobalMetrics
 
-from voice_chat.lipsync.LipsyncEn import LipsyncEn
+from lipsync.LipsyncEn import LipsyncEn
 
-from voice_chat.yak_agents import (
+from yak_agents import (
     YakAgent,
     YakStatus,
     ExternalServiceAgent,
@@ -38,7 +37,7 @@ from voice_chat.yak_agents import (
     YakServiceAgent,
 )
 
-from voice_chat.data_classes.api import (
+from data_classes.api import (
     ApiUserMessage,
     SessionStart,
     ThirdPartyServiceAgentRequest,
@@ -48,13 +47,13 @@ from voice_chat.data_classes.api import (
 )
 
 
-from voice_chat.data_classes import (
+from data_classes import (
     StdResponse,
     MultiPartResponse,
     BlendShapesMultiPartResponse,
 )
-from voice_chat.data_classes.data_models import Menu, Cafe, ImageSelector
-from voice_chat.data_classes.mongodb import (
+from data_classes.data_models import Menu, Cafe, ImageSelector
+from data_classes.mongodb import (
     MenuHelper,
     DatabaseConfig,
     ServicesHelper,
@@ -62,17 +61,17 @@ from voice_chat.data_classes.mongodb import (
     ModelChoice,
     ModelHelper,
 )
-from voice_chat.data_classes.avatar import AvatarConfigParser
-from voice_chat.data_classes.redis import RedisHelper
-from voice_chat.utils import CacheUtils, QueryType, TTSUtilities
+from data_classes.avatar import AvatarConfigParser
+from data_classes.redis import RedisHelper
+from utils import CacheUtils, QueryType, TTSUtilities
 
-from voice_chat.utils import TimerContextManager
+from utils import TimerContextManager
 
 
-from voice_chat.utils import DataProxy, createIfMissing, has_pronouns
-from voice_chat.utils.misc import get_uid
-from voice_chat.text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
+from utils import DataProxy, createIfMissing, has_pronouns
+from utils.misc import get_uid
+from text_to_speech.azure_TTS import AzureTextToSpeech, AzureTTSViseme
+from text_to_speech.TTS import TextToSpeechClass
 
 
 from griptape.utils import Stream

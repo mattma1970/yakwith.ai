@@ -3,7 +3,7 @@ from typing import Union
 from data_classes.chat_data_classes import Menu, MenuList
 from datetime import datetime
 from abc import ABC, abstractmethod
-from voice_chat.utils import time_only
+from utils import time_only
 
 
 class BaseMenuHandler(ABC):

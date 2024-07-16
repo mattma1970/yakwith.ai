@@ -1,5 +1,5 @@
 from attrs import define, field
-from voice_chat.menus import BaseMenuHandler
+from menus import BaseMenuHandler
 
 
 @define

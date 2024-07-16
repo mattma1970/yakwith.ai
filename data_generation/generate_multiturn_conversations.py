@@ -18,10 +18,10 @@ completion is the answer
 
 """
 
-from voice_chat.configs import AppConfig
+from configs import AppConfig
 
 
-from voice_chat.utils import createFolderIfMissing, createIfMissing
+from utils import createFolderIfMissing, createIfMissing
 
 from typing import List, Dict, Tuple
 import re

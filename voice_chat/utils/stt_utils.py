@@ -1,6 +1,6 @@
 from typing import Dict
 import logging
-from voice_chat.yak_agents import YakServiceAgent, ExternalServiceAgent
+from yak_agents import YakServiceAgent, ExternalServiceAgent
 
 logger = logging.getLogger(__name__)
 

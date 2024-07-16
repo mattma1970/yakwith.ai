@@ -4,7 +4,7 @@ from attrs import define, field, Factory
 from enum import Enum
 
 from griptape.structures import Agent
-from voice_chat.yak_agents.memory import PreprocConversationMemory
+from yak_agents.memory import PreprocConversationMemory
 from griptape.drivers import (
     HuggingFaceHubPromptDriver,
     OpenAiChatPromptDriver,
@@ -18,12 +18,12 @@ import os
 import logging
 from omegaconf import OmegaConf
 
-from voice_chat.utils.chat_template_utils import PromptStackUtils
-from voice_chat.data_classes import ModelDriverConfiguration
-from voice_chat.data_classes import PromptBuffer
-from voice_chat.data_classes.mongodb import ModelChoice
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
-from voice_chat.yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
+from utils.chat_template_utils import PromptStackUtils
+from data_classes import ModelDriverConfiguration
+from data_classes import PromptBuffer
+from data_classes.mongodb import ModelChoice
+from text_to_speech.TTS import TextToSpeechClass
+from yak_agents.vllm_chat_prompt_driver import vLLMChatPromptDriver
 
 logger = logging.getLogger(__name__)
 

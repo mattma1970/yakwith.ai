@@ -1,4 +1,4 @@
-from voice_chat.utils import DataProxy
+from utils import DataProxy
 
 
 def test_get_all():

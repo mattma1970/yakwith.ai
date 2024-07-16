@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import pickle
-from voice_chat.data_classes.cache import QueryType, CacheHelper
+from data_classes.cache import QueryType, CacheHelper
 
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-import voice_chat.utils.text_processing as text_processing
+import utils.text_processing as text_processing
 
 
 def test_regex_filter():

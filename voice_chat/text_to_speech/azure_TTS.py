@@ -12,12 +12,12 @@ import azure.cognitiveservices.speech as speechsdk
 from attrs import define, field
 from typing import List, Dict, Iterable, Callable
 from griptape.artifacts import TextArtifact
-from voice_chat.utils.text_processing import remove_problem_chars, remove_strings
-from voice_chat.utils.tts_utilites import TTSUtilities
-from voice_chat.text_to_speech.TTS import TextToSpeechClass
-from voice_chat.text_to_speech.TTS_enums import VisemeSource
+from utils.text_processing import remove_problem_chars, remove_strings
+from utils.tts_utilites import TTSUtilities
+from text_to_speech.TTS import TextToSpeechClass
+from text_to_speech.TTS_enums import VisemeSource
 
-from voice_chat.utils.file import createIfMissing
+from utils.file import createIfMissing
 import re
 import json
 import logging

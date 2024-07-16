@@ -12,11 +12,11 @@ YakServiceAgents are intended to be cached (service_agent_registry) rather than 
 """
 
 import logging
-from voice_chat.yak_agents import YakAgent
-from voice_chat.data_classes.data_models import ModelChoice
-from voice_chat.data_classes.mongodb import DatabaseConfig
-from voice_chat.data_classes import MenuHelper, Cafe
-from voice_chat.data_classes.mongodb import ModelHelper
+from yak_agents import YakAgent
+from data_classes.data_models import ModelChoice
+from data_classes.mongodb import DatabaseConfig
+from data_classes import MenuHelper, Cafe
+from data_classes.mongodb import ModelHelper
 
 logger = logging.getLogger(__name__)
 

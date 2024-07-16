@@ -1,11 +1,11 @@
 import json
 from typing import Dict, Tuple, Union
-from voice_chat.yak_agents import ExternalServiceAgent, YakServiceAgent
-from voice_chat.utils.stt_utils import STTUtilities
-from voice_chat.data_classes import PromptBuffer
+from yak_agents import ExternalServiceAgent, YakServiceAgent
+from utils.stt_utils import STTUtilities
+from data_classes import PromptBuffer
 import logging
 
-from voice_chat.configs.AppConfig import Configurations
+from configs.AppConfig import Configurations
 
 logger = logging.getLogger("YakChatAPI")
 
